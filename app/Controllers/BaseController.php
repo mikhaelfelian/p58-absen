@@ -133,9 +133,15 @@ class BaseController extends \MasterController
 			$this->data['user'] = $this->user;
 			
 			if ($this->user['default_page_type'] == 'id_module') {
-				$this->defaultPathUrl = $this->user['default_module']['nama_module'];
+				$this->defaultPathUrl = isset($this->user['default_module']['nama_module']) ? $this->user['default_module']['nama_module'] : 'dashboard';
 			} else {
-				$this->defaultPathUrl = $this->user['role'][$this->user['default_page_id_role']]['nama_module'];
+				// Safely access role with fallback
+				$default_page_id_role = isset($this->user['default_page_id_role']) ? $this->user['default_page_id_role'] : null;
+				if ($default_page_id_role && isset($this->user['role'][$default_page_id_role]['nama_module'])) {
+					$this->defaultPathUrl = $this->user['role'][$default_page_id_role]['nama_module'];
+				} else {
+					$this->defaultPathUrl = 'dashboard'; // Fallback to dashboard
+				}
 			}
 						
 			// List action assigned to role
@@ -455,16 +461,22 @@ class BaseController extends \MasterController
 	}
 	
 	protected function getDataSetelahNamaUser() {
-		switch ($this->settingAplikasi['data_setelah_nama_user']) {
-			case 'nip';
-				$data_pegawai = 'NIP. ' . $this->user['nip'];
+		// Safety check for setting
+		$setting = isset($this->settingAplikasi['data_setelah_nama_user']) ? $this->settingAplikasi['data_setelah_nama_user'] : 'nip';
+		
+		switch ($setting) {
+			case 'nip':
+				$data_pegawai = 'NIP. ' . (isset($this->user['nip']) ? $this->user['nip'] : 'N/A');
 				break;
 			case 'nama_jabatan':
-				$data_pegawai = $this->user['nama_jabatan'];
+				$data_pegawai = isset($this->user['nama_jabatan']) ? $this->user['nama_jabatan'] : 'N/A';
 				break;
 			case 'email':
-				$data_pegawai = 'Email: ' . $this->user['email'];
-				break;	
+				$data_pegawai = 'Email: ' . (isset($this->user['email']) ? $this->user['email'] : 'N/A');
+				break;
+			default:
+				$data_pegawai = 'NIP. ' . (isset($this->user['nip']) ? $this->user['nip'] : 'N/A');
+				break;
 		}
 		return $data_pegawai;
 	}

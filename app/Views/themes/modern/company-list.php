@@ -14,16 +14,16 @@
 		}
 		
 		$column = [
-			'ignore_urut' => '#'
-			, 'nama_company' => 'Nama Company'
-			, 'alamat' => 'Alamat'
-			, 'contact_person' => 'Contact Person'
-			, 'no_telp' => 'No. Telp'
-			, 'latitude' => 'Latitude'
-			, 'longitude' => 'Longitude'
-			, 'radius_nilai' => 'Radius'
-			, 'status' => 'Status'
-			, 'ignore_action' => 'Aksi'
+			'ignore_urut'    => '#',
+			'nama_company'   => 'Nama Company',
+			'alamat'         => 'Alamat',
+			'contact_person' => 'Contact Person',
+			'no_telp'        => 'No. Telp',
+			'latitude'       => 'Latitude',
+			'longitude'      => 'Longitude',
+			'radius_nilai'   => 'Radius',
+			'status'         => 'Status',
+			'ignore_action'  => 'Aksi'
 		];
 		$th = '';
 		foreach ($column as $val) {

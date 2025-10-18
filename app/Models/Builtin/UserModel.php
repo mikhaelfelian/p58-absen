@@ -330,6 +330,14 @@ class UserModel extends \App\Models\BaseModel
 	
 	public function getListUsers($where) {
 		
+		// Get current logged-in user ID
+		$current_user_id = isset($_SESSION['user']['id_user']) ? $_SESSION['user']['id_user'] : 0;
+		
+		// Security: Hide user ID 1 (super admin) unless current user is also ID 1
+		if ($current_user_id != 1) {
+			$where .= ' AND user.id_user != 1';
+		}
+		
 		// Get user
 		$columns = $this->request->getPost('columns');
 		$order_by = '';
@@ -426,6 +434,9 @@ class UserModel extends \App\Models\BaseModel
 	
 	public function deleteAllUser() 
 	{
+		// Security: Never allow deletion of super admin (id_user = 1)
+		$protected_users = [1]; // Super admin is always protected
+		
 		// List role
 		$sql = 'SELECT id_user 
 				FROM user 
@@ -438,21 +449,24 @@ class UserModel extends \App\Models\BaseModel
 			$list_role[] = $val['id_user'];
 		}
 		
+		// Combine protected users (super admin + all admins)
+		$all_protected = array_unique(array_merge($protected_users, $list_role));
+		
 		// List User
 		$sql = 'SELECT * 
 				FROM user 
 				LEFT JOIN user_role USING(id_user) 
 				LEFT JOIN role USING (id_role) 
-				WHERE id_user NOT IN (' . join(',', $list_role) . ')';
+				WHERE id_user NOT IN (' . join(',', $all_protected) . ')';
 		$user = $this->db->query($sql)->getRowArray();
 		if (!$user) {
-			return ['status' => 'error', 'message' => 'Tidak ditemukan pegawai yang memiliki role bukan admin'];
+			return ['status' => 'error', 'message' => 'Tidak ditemukan pegawai yang dapat dihapus (semua admin dilindungi)'];
 		}
 					
 		$this->db->transStart();
 				
-		// User
-		$sql = 'DELETE FROM user WHERE id_user NOT IN (' . join(',', $list_role) . ')';
+		// User - Use the protected list that includes super admin
+		$sql = 'DELETE FROM user WHERE id_user NOT IN (' . join(',', $all_protected) . ')';
 		$this->db->query($sql);
 		
 		$sql = 'SELECT MAX(id_user) AS max FROM user';
@@ -461,12 +475,12 @@ class UserModel extends \App\Models\BaseModel
 		$sql = 'ALTER TABLE user AUTO_INCREMENT ' . $max;
 		$this->db->query($sql);
 		
-		// Jabatan
-		$sql = 'DELETE FROM user_jabatan WHERE id_user NOT IN (' . join(',', $list_role) . ')';
+		// Jabatan - Use protected list
+		$sql = 'DELETE FROM user_jabatan WHERE id_user NOT IN (' . join(',', $all_protected) . ')';
 		$this->db->query($sql);
 		
-		// Role
-		$sql = 'DELETE FROM user_role WHERE id_user NOT IN (' . join(',', $list_role) . ')';
+		// Role - Use protected list
+		$sql = 'DELETE FROM user_role WHERE id_user NOT IN (' . join(',', $all_protected) . ')';
 		$this->db->query($sql);
 						
 		$this->db->transComplete();

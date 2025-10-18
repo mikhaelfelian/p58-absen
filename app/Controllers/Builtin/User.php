@@ -220,13 +220,17 @@ class User extends \App\Controllers\BaseController
 			$val['verified'] =  $val['verified'] == 1 ? 'Ya' : 'Tidak' ;
 			$val['ignore_avatar'] = '<img src="'. $this->config->baseURL . 'public/images/user/' . $avatar . '">';
 								
-			$val['ignore_action'] = '<div class="form-inline btn-action-group">'
-										. btn_link(
+			$val['ignore_action'] = '<div class="form-inline btn-action-group">';
+			
+			// Edit button - only show if user has update permission
+			if ($this->hasPermission('update_own') || $this->hasPermission('update_all')) {
+				$val['ignore_action'] .= btn_link(
 												['icon' => 'fas fa-edit'
 													, 'url' => base_url() . '/builtin/user/edit?id=' . $val['id_user']
 													, 'attr' => ['class' => 'btn btn-success btn-edit btn-xs me-1', 'data-id' => $val['id_user']]
 													, 'label' => 'Edit'
 												]);
+			}
 			
 			if ($this->hasPermission('delete_own') || $this->hasPermission('delete_all')) {
 				$val['ignore_action'] .= btn_label(

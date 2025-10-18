@@ -2,12 +2,22 @@
 	<div class="card-body">
 		<div class="d-flex justify-content-between">
 			<div>
-				<a href="<?=current_url()?>/add" class="btn btn-success btn-xs"><i class="fa fa-plus pe-1"></i> Tambah Data</a>
-				<a href="<?=base_url()?>builtin/user/uploadexcel" class="btn btn-success btn-xs"><i class="fas fa-arrow-up-from-bracket pe-1"></i> Upload Excel</a>
-				<button class="btn btn-danger btn-delete-all-user btn-xs"><i class="fas fa-trash me-2"></i>Hapus Semua Pegawai</button>
+				<?php if (has_permission('create')): ?>
+					<a href="<?=current_url()?>/add" class="btn btn-success btn-xs"><i class="fa fa-plus pe-1"></i> Tambah Data</a>
+				<?php endif; ?>
+				
+				<?php if (has_permission('create')): ?>
+					<a href="<?=base_url()?>builtin/user/uploadexcel" class="btn btn-success btn-xs"><i class="fas fa-arrow-up-from-bracket pe-1"></i> Upload Excel</a>
+				<?php endif; ?>
+				
+				<?php if (has_permission('delete_all')): ?>
+					<button class="btn btn-danger btn-delete-all-user btn-xs"><i class="fas fa-trash me-2"></i>Hapus Semua Pegawai</button>
+				<?php endif; ?>
 			</div>
 			<div class="btn-group">
+			<?php if (has_permission('create')): ?>
 				<button class="btn btn-outline-secondary me-0 btn-export btn-xs" type="button" id="btn-excel" disabled><i class="fas fa-file-excel me-2"></i>XLSX</button>
+				<?php endif; ?>
 			</div>
 		</div>
 		<hr/>
