@@ -42,7 +42,9 @@ if (@$scripts) {
 				echo '<script data-type="dynamic-resource-head" type="text/javascript">' . $file['script'] . '</script>' . "\n";
 			}
 		} else {
-			echo '<script data-type="dynamic-resource-head" type="text/javascript" src="'.$file.'?r='.time().'"></script>' . "\n";
+			// Check if file already has query params
+			$separator = (strpos($file, '?') === false) ? '?' : '&';
+			echo '<script data-type="dynamic-resource-head" type="text/javascript" src="'.$file.$separator.'r='.time().'"></script>' . "\n";
 		}
 	}
 }
