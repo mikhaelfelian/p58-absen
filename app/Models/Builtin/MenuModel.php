@@ -190,10 +190,11 @@ class MenuModel extends \App\Models\BaseModel
 		$data_db['id_module'] = $_POST['id_module'] ?: NULL;
 		$data_db['url'] = $_POST['url'];
 		
-		if (trim($_POST['id_menu_kategori']) == '') {
-			$id_menu_kategori = NULL;
+		// id_menu_kategori cannot be NULL (database constraint), default to 0 if empty
+		if (empty($_POST['id_menu_kategori']) || trim($_POST['id_menu_kategori']) == '') {
+			$id_menu_kategori = 0;
 		} else {
-			$id_menu_kategori = $_POST['id_menu_kategori'];
+			$id_menu_kategori = (int)$_POST['id_menu_kategori'];
 		}
 		$data_db['id_menu_kategori'] = $id_menu_kategori;
 			
