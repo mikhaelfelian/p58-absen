@@ -17,9 +17,9 @@ class Company extends BaseController
 		$this->data['title'] = 'Master Company';
 		
 		// Add required JS/CSS
-		$this->addJs($this->config->baseURL . 'public/vendors/leafletjs/leaflet.js');
-		$this->addStyle($this->config->baseURL . 'public/vendors/leafletjs/leaflet.css');
-		$this->addJs($this->config->baseURL . 'public/themes/modern/js/company.js');
+		$this->addJs(base_url('public/vendors/leafletjs/leaflet.js'));
+		$this->addStyle(base_url('public/vendors/leafletjs/leaflet.css'));
+		$this->addJs(base_url('public/themes/modern/js/company.js'));
 	}
 	
 	public function index() {

@@ -1,189 +1,189 @@
-.nama-barang-container {
-	display:flex;
-	justify-content: space-between;
-}
-
-.nama-barang-container .input-group {
-	flex-wrap: nowrap;
-    align-items: center;
-}
-
-.btn-item-option {
-	padding: 0;
-	padding-left: 10px;
-	border: 0;
-}
-.btn-item-option:hover {
-	padding: 0;
-	padding-left: 10px;
-	border: 0;
-}
-.del-diskon:hover {
-	padding: 0;
-	padding-left: 5px;
-	border: 0;
-}
-
-.barang-pilih-empty {
-	height: 100%;
-	padding-top: 10px;
-}
-
-.del-customer {
-	width: 64px;
-}
-
-.pembeli-nama {
-	font-size: 120%;
-    margin: auto;
-    margin-left: 0;
-}
-
-.item-menu {
-	position: relative;
-}
-
-.del-diskon {
-	padding-right: 0;
-    padding-left: 5px;
-}
-
-.diskon-row td{
-	padding-top: 0 !important;
-}
-
-.right-panel-footer button {
-	width: 100%;
-	height: 50px;
-}
-
-.table-grid thead {
-	display:none;
-}
-
-.table-grid #tabel-data_wrapper .dataTables_scrollBody {
-	top: calc(var(--top-margin) + 0px + 55px);
-}
-
-.table-grid #tabel-data_wrapper .dataTables_scroll {
-    background: none;
-    box-shadow: none !important;
-	padding: 0;
-}
-
-.table-grid .table>:not(caption)>*>* {
-	border-bottom-width: 0 !important;
-}
-
-.table-grid .item {
-    background: #FFFFFF;
-	text-align: center;
-	border: 1px solid #d0dbe9;
-	border-radius: 5px;
-	margin-right: 10px;
-	padding: 13px;
-	padding-bottom: 10px;
-	margin-bottom: 10px;
-}
-.table-grid .product-prop {
-	margin-top: 10px;
-}
-
-.table-grid td {
-	padding: 0;
-}
-.table-grid .item .price{
-	font-weight: normal !important;
-}
-
-.table-grid .item {
-	transition: all .2s;
-}
-
-.table-grid .item:hover {
-	background: #d0e3ff;
-}
-
-/* Tree */
-.tree {
-    min-height:20px;
-    padding:19px;
-    margin-bottom:20px;
-    background-color:#fbfbfb;
-    border:1px solid #999;
-    -webkit-border-radius:4px;
-    -moz-border-radius:4px;
-    border-radius:4px;
-    -webkit-box-shadow:inset 0 1px 1px rgba(0, 0, 0, 0.05);
-    -moz-box-shadow:inset 0 1px 1px rgba(0, 0, 0, 0.05);
-    box-shadow:inset 0 1px 1px rgba(0, 0, 0, 0.05)
-}
-.tree li {
-    list-style-type:none;
-    margin:0;
-    padding:10px 5px 0 5px;
-    position:relative;
-	margin-left:25px;
-}
-.tree li::before, .tree li::after {
-    content:'';
-    left:-35px;
-    position:absolute;
-}
-.tree li::before {
-    border-left:1px solid #999;
-    height:100%;
-    top:0px;
-    width:1px;
-	left: -36px;
-}
-.tree li::after {
-    border-top:1px solid #999;
-    top:29px;
-    width:40px
-}
-
-.tree .title {
-	display:inline-block;
-    padding:4px 9px 5px 4px;
-	cursor: pointer;
-}
-.tree>ul>li {
-	margin:0;
-}
-.tree>ul>li::before, .tree>ul>li::after {
-    border:0;
-}
-.tree li:last-child::before {
-    height:30px
-}
-
-.presensi-container {
-	width: 100%;
-    text-decoration: none;
-    color: inherit;
-}
-
-.box-absen-masuk {
-	background: #efffef;
-}
-
-/* Modal */
-.modal-fixed-layout {
-	height: 100vh;
-    overflow: hidden;
-}
-.modal-fixed-layout .modal-content {
-	overflow: auto;
-	height: 90vh;
-}
-.modal-fixed-layout .modal-body {
-	overflow: auto;
-    height: 50vh;
-}
-
-@media screen and (max-width: 360px) {
-	.icon-box-presensi {
-		display:none;
-	}
+.nama-barang-container {
+	display:flex;
+	justify-content: space-between;
+}
+
+.nama-barang-container .input-group {
+	flex-wrap: nowrap;
+    align-items: center;
+}
+
+.btn-item-option {
+	padding: 0;
+	padding-left: 10px;
+	border: 0;
+}
+.btn-item-option:hover {
+	padding: 0;
+	padding-left: 10px;
+	border: 0;
+}
+.del-diskon:hover {
+	padding: 0;
+	padding-left: 5px;
+	border: 0;
+}
+
+.barang-pilih-empty {
+	height: 100%;
+	padding-top: 10px;
+}
+
+.del-customer {
+	width: 64px;
+}
+
+.pembeli-nama {
+	font-size: 120%;
+    margin: auto;
+    margin-left: 0;
+}
+
+.item-menu {
+	position: relative;
+}
+
+.del-diskon {
+	padding-right: 0;
+    padding-left: 5px;
+}
+
+.diskon-row td{
+	padding-top: 0 !important;
+}
+
+.right-panel-footer button {
+	width: 100%;
+	height: 50px;
+}
+
+.table-grid thead {
+	display:none;
+}
+
+.table-grid #tabel-data_wrapper .dataTables_scrollBody {
+	top: calc(var(--top-margin) + 0px + 55px);
+}
+
+.table-grid #tabel-data_wrapper .dataTables_scroll {
+    background: none;
+    box-shadow: none !important;
+	padding: 0;
+}
+
+.table-grid .table>:not(caption)>*>* {
+	border-bottom-width: 0 !important;
+}
+
+.table-grid .item {
+    background: #FFFFFF;
+	text-align: center;
+	border: 1px solid #d0dbe9;
+	border-radius: 5px;
+	margin-right: 10px;
+	padding: 13px;
+	padding-bottom: 10px;
+	margin-bottom: 10px;
+}
+.table-grid .product-prop {
+	margin-top: 10px;
+}
+
+.table-grid td {
+	padding: 0;
+}
+.table-grid .item .price{
+	font-weight: normal !important;
+}
+
+.table-grid .item {
+	transition: all .2s;
+}
+
+.table-grid .item:hover {
+	background: #d0e3ff;
+}
+
+/* Tree */
+.tree {
+    min-height:20px;
+    padding:19px;
+    margin-bottom:20px;
+    background-color:#fbfbfb;
+    border:1px solid #999;
+    -webkit-border-radius:4px;
+    -moz-border-radius:4px;
+    border-radius:4px;
+    -webkit-box-shadow:inset 0 1px 1px rgba(0, 0, 0, 0.05);
+    -moz-box-shadow:inset 0 1px 1px rgba(0, 0, 0, 0.05);
+    box-shadow:inset 0 1px 1px rgba(0, 0, 0, 0.05)
+}
+.tree li {
+    list-style-type:none;
+    margin:0;
+    padding:10px 5px 0 5px;
+    position:relative;
+	margin-left:25px;
+}
+.tree li::before, .tree li::after {
+    content:'';
+    left:-35px;
+    position:absolute;
+}
+.tree li::before {
+    border-left:1px solid #999;
+    height:100%;
+    top:0px;
+    width:1px;
+	left: -36px;
+}
+.tree li::after {
+    border-top:1px solid #999;
+    top:29px;
+    width:40px
+}
+
+.tree .title {
+	display:inline-block;
+    padding:4px 9px 5px 4px;
+	cursor: pointer;
+}
+.tree>ul>li {
+	margin:0;
+}
+.tree>ul>li::before, .tree>ul>li::after {
+    border:0;
+}
+.tree li:last-child::before {
+    height:30px
+}
+
+.presensi-container {
+	width: 100%;
+    text-decoration: none;
+    color: inherit;
+}
+
+.box-absen-masuk {
+	background: #efffef;
+}
+
+/* Modal */
+.modal-fixed-layout {
+	height: 100vh;
+    overflow: hidden;
+}
+.modal-fixed-layout .modal-content {
+	overflow: auto;
+	height: 90vh;
+}
+.modal-fixed-layout .modal-body {
+	overflow: auto;
+    height: 50vh;
+}
+
+@media screen and (max-width: 360px) {
+	.icon-box-presensi {
+		display:none;
+	}
 }
