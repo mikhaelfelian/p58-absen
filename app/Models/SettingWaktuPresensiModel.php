@@ -55,6 +55,7 @@ class SettingWaktuPresensiModel extends \App\Models\BaseModel
 		$waktu_pulang_akhir = $_POST['waktu_pulang_akhir_jam'] . ':' . $_POST['waktu_pulang_akhir_menit'] . ':' . $_POST['waktu_pulang_akhir_detik'];
 		
 		$data_db['nama_setting'] = $_POST['nama_setting'];
+		$data_db['id_company'] = $_POST['id_company'];
 		$data_db['batas_waktu_masuk'] = $batas_waktu_masuk;
 		$data_db['batas_waktu_pulang'] = $batas_waktu_pulang;
 		$data_db['waktu_masuk_awal'] = $waktu_masuk_awal;

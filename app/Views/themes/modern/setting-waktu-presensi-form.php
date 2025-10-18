@@ -22,13 +22,30 @@ helper('html');
 		<form method="post" action="" style="max-width: 750px" class="form-horizontal p-3" enctype="multipart/form-data">
 			<div>
 				<div class="row mb-3">
-					<label class="col-sm-3 col-form-label">Nama Setting</label>
+					<label class="col-sm-3 col-form-label fw-semibold text-dark">Nama Setting <span class="text-primary fw-bold">*</span></label>
 					<div class="col-sm-9">
-						<input type="text" name="nama_setting" class="form-control" required="required" value="<?=@$setting_presensi['nama_setting']?>"/>
+						<input type="text" name="nama_setting" class="form-control border-2" required="required" value="<?=@$setting_presensi['nama_setting']?>" placeholder="Masukkan nama setting waktu presensi"/>
+					</div>
+				</div>
+				
+				<div class="row mb-3">
+					<label class="col-sm-3 col-form-label fw-semibold text-dark">Pilih Perusahaan <span class="text-primary fw-bold">*</span></label>
+					<div class="col-sm-9">
+						<select class="form-control select2 border-2" name="id_company" id="id_company" required>
+							<option value="">-- Pilih Perusahaan --</option>
+							<?php if (!empty($companies)): ?>
+								<?php foreach ($companies as $company): ?>
+								<option value="<?=$company->id_company?>" <?=@$setting_presensi['id_company'] == $company->id_company ? 'selected' : ''?>>
+									<?=$company->nama_company?>
+								</option>
+								<?php endforeach; ?>
+							<?php endif; ?>
+						</select>
+						<small class="text-muted fw-medium">Pilih perusahaan untuk setting waktu presensi ini</small>
 					</div>
 				</div>
 				<div class="row mb-3">
-					<label class="col-sm-3 col-form-label">Periode Waktu Masuk</label>
+					<label class="col-sm-3 col-form-label fw-semibold text-dark">Periode Waktu Masuk</label>
 					<div class="col-sm-9">
 						<?php
 						$waktu = [];
@@ -136,7 +153,9 @@ helper('html');
 						<small>Jika presensi dilakukan sebelum batas waktu pulang maka akan dihitung pulang sebelum waktunya</small>
 					</div>
 				</div>
-				<button type="submit" class="btn btn-primary offset-sm-3" name="submit" value="submit">Submit</button>
+				<button type="submit" class="btn btn-primary btn-lg px-4 offset-sm-3" name="submit" value="submit">
+					<i class="fas fa-save me-2"></i>Simpan Setting
+				</button>
 				<input type="hidden" name="id" value="<?=@$id?>"/>
 			</div>
 		</form>

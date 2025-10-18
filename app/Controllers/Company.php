@@ -47,6 +47,15 @@ class Company extends BaseController
 		
 		$this->data['mode'] = 'add';
 		$this->data['form_errors'] = [];
+		$this->data['company_setting'] = [
+			'hari_kerja' => [1,2,3,4,5],
+			'gunakan_foto_selfi' => 'Y',
+			'gunakan_radius_lokasi' => 'Y',
+			'latitude' => '-7.797068',
+			'longitude' => '110.370529',
+			'radius_nilai' => '1.00',
+			'radius_satuan' => 'km'
+		];
 		$this->view('company-form.php', $this->data);
 	}
 	
@@ -79,6 +88,7 @@ class Company extends BaseController
 		$this->data['mode'] = 'edit';
 		$this->data['company'] = $company;
 		$this->data['form_errors'] = [];
+		$this->data['company_setting'] = $this->model->getCompanySetting($company->id_company);
 		$this->view('company-form.php', $this->data);
 	}
 	
@@ -125,6 +135,7 @@ class Company extends BaseController
 		$no = $this->request->getPost('start') + 1 ?: 1;
 		foreach ($query['data'] as $key => &$val) {
 			$val->ignore_urut = $no;
+			//$val->ignore_id = $val->id_company;  // Include ID for DataTable
 			
 			// Build actions
 			$val->ignore_action = '<div class="btn-action-group">';

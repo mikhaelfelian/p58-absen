@@ -429,6 +429,26 @@ $(document).ready(function() {
 		
 	$('#btn-presensi').click(function(e){
 		e.preventDefault();
+		
+		// Check if today is a working day
+		var today = new Date().getDay(); // 0 = Sunday, 1 = Monday, etc.
+		var hariKerja = typeof companySetting !== 'undefined' && companySetting && companySetting.hari_kerja ? companySetting.hari_kerja : [1,2,3,4,5];
+		
+		// Ensure integer comparison
+		var isWorkingDay = hariKerja.some(function(day) {
+			return parseInt(day) === parseInt(today);
+		});
+		
+		if (!isWorkingDay) {
+			Swal.fire({
+				icon: 'info',
+				title: 'Hari Libur',
+				text: 'Anda tidak bisa absen di hari libur. Presensi hanya dapat dilakukan pada hari kerja.',
+				confirmButtonText: 'OK'
+			});
+			return false;
+		}
+		
 		date = new Date();
 		jam_sekarang = ("0" + date.getHours()).substr(-2);
 		menit_sekarang = ("0" + date.getMinutes()).substr(-2);
@@ -455,6 +475,25 @@ $(document).ready(function() {
 		
 	$bootbox_presensi = '';
 	function presensi(jenis_presensi) {
+		
+		// Check if today is a working day
+		var today = new Date().getDay(); // 0 = Sunday, 1 = Monday, etc.
+		var hariKerja = typeof companySetting !== 'undefined' && companySetting && companySetting.hari_kerja ? companySetting.hari_kerja : [1,2,3,4,5];
+		
+		// Ensure integer comparison
+		var isWorkingDay = hariKerja.some(function(day) {
+			return parseInt(day) === parseInt(today);
+		});
+		
+		if (!isWorkingDay) {
+			Swal.fire({
+				icon: 'info',
+				title: 'Hari Libur',
+				text: 'Anda tidak bisa absen di hari libur. Presensi hanya dapat dilakukan pada hari kerja.',
+				confirmButtonText: 'OK'
+			});
+			return false;
+		}
 		
 		if (geolocation.coords == undefined) {
 			alert_icon('Lokasi harus diaktifkan');
@@ -495,7 +534,15 @@ $(document).ready(function() {
 			}
 		}
 				
-		data = {'location' : geolocation, 'jenis_presensi' : jenis_presensi, 'foto' : ''};
+		// Get selected company ID
+		var selectedCompanyId = $('#selected-company-id').val() || $('#id_company').val();
+		
+		data = {
+			'location' : geolocation, 
+			'jenis_presensi' : jenis_presensi, 
+			'foto' : '',
+			'id_company': selectedCompanyId
+		};
 		
 		/* r = Math.floor(Math.random() * (64 - 16 + 1)) + 32;
 		p = Array.from(
@@ -641,13 +688,15 @@ $(document).ready(function() {
 				data = JSON.parse(data);
 				if (data.status == 'ok') 
 				{
-					console.log(data)
 					$bootbox_presensi.modal('hide');
 					if (video) {
 						tracks = video.srcObject.getTracks();
 						tracks[0].stop();
 					}
-					$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
+					// Update waktu presensi if btn_clicked is set
+					if (btn_clicked && btn_clicked !== '') {
+						$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
+					}
 					toast_mobile('<i class="bi bi-check-circle me-2"></i>Data berhasil disimpan');
 					$('.nav-footer-home').click();
 					/* let $bootbox_timer = bootbox.dialog({

@@ -133,12 +133,62 @@
 			</div>
 			
 			<div class="row mb-3">
-				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label">Keterangan</label>
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Keterangan</label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
-					<textarea class="form-control" name="keterangan" rows="3"><?=@$company->keterangan?></textarea>
+					<textarea class="form-control border-2" name="keterangan" rows="3" placeholder="Masukkan keterangan tambahan (opsional)"><?=@$company->keterangan?></textarea>
 				</div>
 			</div>
 			
+			<!-- Setting Presensi Section -->
+			<div class="row mb-3">
+				<div class="col-12">
+					<div class="bg-light p-3 ps-4 mb-3 rounded">
+						<h5 class="m-0 fw-semibold text-dark">
+							<i class="fas fa-cog me-2"></i>Setting Presensi
+						</h5>
+						<small class="text-muted">Konfigurasi pengaturan presensi untuk perusahaan ini</small>
+					</div>
+				</div>
+			</div>
+			
+			
+			<div class="row mb-3">
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Hari Kerja</label>
+				<div class="col-sm-8 col-md-6 col-lg-5">
+					<?php
+					$nama_hari = [1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu', 0 => 'Minggu'];
+					$setting_hari_kerja = @$company_setting['hari_kerja'] ?: [1,2,3,4,5];
+					foreach ($nama_hari as $key => $val) {
+						$checked = in_array($key, $setting_hari_kerja) ? ' checked' : '';
+						echo '<div class="form-check">
+								<input class="form-check-input" name="hari_kerja[]" type="checkbox" value="' . $key . '" id="hari_' . $val . '" ' . $checked . '>
+								<label class="form-check-label fw-medium" for="hari_' . $val . '">' . $val . '</label>
+							</div>';
+					}
+					?>
+				</div>
+			</div>
+			
+			<div class="row mb-3">
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Gunakan Foto Selfi</label>
+				<div class="col-sm-8 col-md-6 col-lg-5">
+					<select class="form-control border-2" name="gunakan_foto_selfi" style="width:auto">
+						<option value="Y" <?=@$company_setting['gunakan_foto_selfi'] == 'Y' ? 'selected' : ''?>>Ya</option>
+						<option value="N" <?=@$company_setting['gunakan_foto_selfi'] == 'N' ? 'selected' : ''?>>Tidak</option>
+					</select>
+				</div>
+			</div>
+			
+			<div class="row mb-3">
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Gunakan Radius Lokasi</label>
+				<div class="col-sm-8 col-md-6 col-lg-5">
+					<select class="form-control border-2" name="gunakan_radius_lokasi" id="gunakan-radius-lokasi" style="width:auto">
+						<option value="Y" <?=@$company_setting['gunakan_radius_lokasi'] == 'Y' ? 'selected' : ''?>>Ya</option>
+						<option value="N" <?=@$company_setting['gunakan_radius_lokasi'] == 'N' ? 'selected' : ''?>>Tidak</option>
+					</select>
+					<small class="text-muted fw-medium">Jika Ya, maka presensi harus dilakukan didalam radius yang telah ditetapkan</small>
+				</div>
+			</div>			
 			<div class="row mb-3">
 				<div class="col-sm-8 col-md-6 col-lg-5 offset-sm-3 offset-md-2 offset-lg-3 offset-xl-2">
 					<button type="submit" name="submit" value="true" class="btn btn-primary">Simpan</button>

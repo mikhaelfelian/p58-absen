@@ -154,6 +154,7 @@ class User_company extends BaseController
 		$no = 1;
 		foreach ($data as $key => &$val) {
 			$val->ignore_urut = $no;
+			$val->ignore_id = $val->id_user_company;  // Add ID for DataTable
 			
 			// Format dates
 			$val->tanggal_mulai = $val->tanggal_mulai ? date('d-m-Y', strtotime($val->tanggal_mulai)) : '-';

@@ -3,7 +3,7 @@
 		<div class="d-flex justify-content-between">
 			<div>
 				<?php if (has_permission('create')): ?>
-				<a href="<?=current_url()?>/add" class="btn btn-success btn-xs"><i class="fa fa-plus pe-1"></i> Tambah Company</a>
+				<a href="<?=current_url()?>/add" class="btn btn-success btn-xs"><i class="fa fa-plus pe-1"></i> Tambah</a>
 				<?php endif; ?>
 			</div>
 		</div>
@@ -23,11 +23,16 @@
 			'longitude'      => 'Longitude',
 			'radius_nilai'   => 'Radius',
 			'status'         => 'Status',
-			'ignore_action'  => 'Aksi'
+			'ignore_action'  => 'Aksi',
 		];
 		$th = '';
-		foreach ($column as $val) {
-			$th .= '<th>' . $val . '</th>'; 
+		foreach ($column as $key => $val) {
+			// Hide ID column
+			if ($key == 'ignore_id') {
+				$th .= '<th style="display:none;">' . $val . '</th>'; 
+			} else {
+				$th .= '<th>' . $val . '</th>'; 
+			}
 		}
 		?>
 		<div class="table-responsive">

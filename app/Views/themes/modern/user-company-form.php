@@ -30,7 +30,7 @@
 			<input type="hidden" name="id" value="<?=@$assignment->id_user_company?>">
 			
 			<div class="row mb-3">
-				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label">Pilih Pegawai <span class="text-danger">*</span></label>
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Pilih Pegawai <span class="text-primary fw-bold">*</span></label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
 					<select class="form-control select2" name="id_user" id="id_user" required <?=@$assignment ? 'disabled' : ''?>>
 						<option value="">-- Pilih Pegawai --</option>
@@ -43,45 +43,45 @@
 					<?php if (@$assignment): ?>
 					<input type="hidden" name="id_user" value="<?=$assignment->id_user?>">
 					<?php endif; ?>
-					<?php if (!empty($form_errors['id_user'])) echo '<small class="text-danger">' . $form_errors['id_user'] . '</small>'?>
+					<?php if (!empty($form_errors['id_user'])) echo '<small class="text-danger fw-medium">' . $form_errors['id_user'] . '</small>'?>
 				</div>
 			</div>
 			
 			<div class="row mb-3">
-				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label">Pilih Company <span class="text-danger">*</span></label>
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Pilih Perusahaan <span class="text-primary fw-bold">*</span></label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
-					<select class="form-control select2" name="id_company" id="id_company" required>
-						<option value="">-- Pilih Company --</option>
+					<select class="form-control select2 border-2" name="id_company" id="id_company" required>
+						<option value="">-- Pilih Perusahaan --</option>
 						<?php foreach ($companies as $company): ?>
 						<option value="<?=$company->id_company?>" <?=@$assignment && $assignment->id_company == $company->id_company ? 'selected' : ''?>>
 							<?=$company->nama_company?>
 						</option>
 						<?php endforeach; ?>
 					</select>
-					<?php if (!empty($form_errors['id_company'])) echo '<small class="text-danger">' . $form_errors['id_company'] . '</small>'?>
+					<?php if (!empty($form_errors['id_company'])) echo '<small class="text-danger fw-medium">' . $form_errors['id_company'] . '</small>'?>
 				</div>
 			</div>
 			
 			<div class="row mb-3">
-				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label">Tanggal Mulai</label>
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Tanggal Mulai</label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
-					<input type="text" class="form-control datepicker" name="tanggal_mulai" value="<?=@$assignment->tanggal_mulai ? date('d-m-Y', strtotime($assignment->tanggal_mulai)) : ''?>" placeholder="dd-mm-yyyy">
-					<small class="text-muted">Kosongkan jika berlaku mulai sekarang</small>
+					<input type="text" class="form-control datepicker border-2" name="tanggal_mulai" value="<?=@$assignment->tanggal_mulai ? date('d-m-Y', strtotime($assignment->tanggal_mulai)) : ''?>" placeholder="dd-mm-yyyy">
+					<small class="text-muted fw-medium">Kosongkan jika berlaku mulai sekarang</small>
 				</div>
 			</div>
 			
 			<div class="row mb-3">
-				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label">Tanggal Selesai</label>
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Tanggal Selesai</label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
-					<input type="text" class="form-control datepicker" name="tanggal_selesai" value="<?=@$assignment->tanggal_selesai ? date('d-m-Y', strtotime($assignment->tanggal_selesai)) : ''?>" placeholder="dd-mm-yyyy">
-					<small class="text-muted">Kosongkan jika tidak ada batas waktu</small>
+					<input type="text" class="form-control datepicker border-2" name="tanggal_selesai" value="<?=@$assignment->tanggal_selesai ? date('d-m-Y', strtotime($assignment->tanggal_selesai)) : ''?>" placeholder="dd-mm-yyyy">
+					<small class="text-muted fw-medium">Kosongkan jika tidak ada batas waktu</small>
 				</div>
 			</div>
 			
 			<div class="row mb-3">
-				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label">Status</label>
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Status</label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
-					<select class="form-control" name="status">
+					<select class="form-control border-2" name="status">
 						<option value="active" <?=@$assignment->status == 'active' || !@$assignment->status ? 'selected' : ''?>>Active</option>
 						<option value="inactive" <?=@$assignment->status == 'inactive' ? 'selected' : ''?>>Inactive</option>
 						<option value="completed" <?=@$assignment->status == 'completed' ? 'selected' : ''?>>Completed</option>
@@ -90,35 +90,24 @@
 			</div>
 			
 			<div class="row mb-3">
-				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label">Keterangan</label>
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Keterangan</label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
-					<textarea class="form-control" name="keterangan" rows="3"><?=@$assignment->keterangan?></textarea>
+					<textarea class="form-control border-2" name="keterangan" rows="3" placeholder="Masukkan keterangan tambahan (opsional)"><?=@$assignment->keterangan?></textarea>
 				</div>
 			</div>
 			
 			<div class="row mb-3">
 				<div class="col-sm-8 col-md-6 col-lg-5 offset-sm-3 offset-md-2 offset-lg-3 offset-xl-2">
-					<button type="submit" name="submit" value="true" class="btn btn-primary">Simpan</button>
-					<a href="<?=$module_url?>" class="btn btn-secondary">Batal</a>
+					<button type="submit" name="submit" value="true" class="btn btn-primary btn-lg px-4 me-2">
+						<i class="fas fa-save me-2"></i>Simpan
+					</button>
+					<a href="<?=$module_url?>" class="btn btn-outline-secondary btn-lg px-4">
+						<i class="fas fa-times me-2"></i>Batal
+					</a>
 				</div>
 			</div>
 		</form>
 	</div>
 </div>
 
-<script>
-$(document).ready(function() {
-	// Initialize Select2
-	$('.select2').select2({
-		theme: 'bootstrap-5',
-		width: '100%'
-	});
-	
-	// Initialize Flatpickr for date picker
-	$('.datepicker').flatpickr({
-		dateFormat: 'd-m-Y',
-		locale: 'id'
-	});
-});
-</script>
 

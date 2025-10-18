@@ -8,6 +8,7 @@
 
 namespace App\Controllers;
 use App\Models\SettingWaktuPresensiModel;
+use App\Models\CompanyModel;
 
 class Setting_waktu_presensi extends \App\Controllers\BaseController
 {
@@ -34,13 +35,17 @@ class Setting_waktu_presensi extends \App\Controllers\BaseController
 	{
 		$this->data['setting_presensi'] = [];
 		
+		// Load companies for dropdown
+		$companyModel = new CompanyModel;
+		$this->data['companies'] = $companyModel->getActiveCompanies();
+		
 		if (!empty($_POST['submit'])) {
 			$this->data['message'] = $this->model->saveData();
 			$this->data['setting_presensi'] = $this->model->getSettingWaktuPresensiById($this->data['message']['id']);
 			$this->data['id'] = $this->data['message']['id'];
 		}
 		
-		$this->data['title'] = 'Tambah Data Penjualan';
+		$this->data['title'] = 'Tambah Setting Waktu Presensi';
 		$this->data['breadcrumb']['Add'] = '';
 		$this->view('setting-waktu-presensi-form.php', $this->data);
 	}
@@ -48,6 +53,10 @@ class Setting_waktu_presensi extends \App\Controllers\BaseController
 	public function edit()
 	{
 		$error = [];
+		
+		// Load companies for dropdown
+		$companyModel = new CompanyModel;
+		$this->data['companies'] = $companyModel->getActiveCompanies();
 		
 		if (empty($_GET['id'])) {
 			$error = ['status' => 'error', 'message' => 'Data tidak ditemukan'];
@@ -67,7 +76,7 @@ class Setting_waktu_presensi extends \App\Controllers\BaseController
 			$this->data['setting_presensi'] = $this->model->getSettingWaktuPresensiById($_GET['id']);
 		}
 		
-		$this->data['title'] = 'Edit Waktu Presensi';
+		$this->data['title'] = 'Edit Setting Waktu Presensi';
 		$this->data['id'] = $_GET['id'];
 		$this->data['breadcrumb']['Edit'] = '';		
 		$this->view('setting-waktu-presensi-form.php', $this->data);

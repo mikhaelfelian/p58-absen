@@ -96,6 +96,41 @@ die; */
 	<?php endif; ?>
 	
 	<?php
+	// Get company-specific settings (use first company as default for now)
+	$company_setting = null;
+	if (!empty($companies)) {
+		$company_setting = $companies[0]->setting_data ?? null;
+	}
+	
+	// Fallback to global setting if no company setting
+	if (!$company_setting) {
+		$company_setting = [
+			'hari_kerja' => json_decode($setting_presensi['hari_kerja'], true) ?: [1,2,3,4,5],
+			'gunakan_foto_selfi' => $setting_presensi['gunakan_foto_selfi'] ?? 'Y',
+			'gunakan_radius_lokasi' => $setting_presensi['gunakan_radius_lokasi'] ?? 'Y',
+			'latitude' => $setting_presensi['latitude'] ?? '-7.797068',
+			'longitude' => $setting_presensi['longitude'] ?? '110.370529',
+			'radius_nilai' => $setting_presensi['radius_nilai'] ?? '1.00',
+			'radius_satuan' => $setting_presensi['radius_satuan'] ?? 'km'
+		];
+	}
+	
+	// Debug: Show company setting hari_kerja
+	if (isset($_GET['debug'])) {
+		echo '<div class="alert alert-info">';
+		echo '<h6>Debug Information:</h6>';
+		echo '<strong>Company Setting Hari Kerja:</strong> ';
+		print_r($company_setting['hari_kerja']);
+		echo '<br><strong>Global Setting Hari Kerja:</strong> ';
+		print_r(json_decode($setting_presensi['hari_kerja'], true));
+		echo '<br><strong>Companies Count:</strong> ' . count($companies ?? []);
+		if (!empty($companies)) {
+			echo '<br><strong>First Company Setting Data:</strong> ';
+			print_r($companies[0]->setting_data ?? 'NULL');
+		}
+		echo '</div>';
+	}
+	
 	$waktu_masuk = $waktu_pulang = 'Belum absen';
 	$curr_date = date('Y-m-d');
 	if (key_exists($curr_date, $riwayat_presensi)) 
@@ -113,7 +148,19 @@ die; */
 		}
 		
 	}
+	
+	// Check if today is a working day
+	$today_day_of_week = date('w'); // 0 = Sunday, 1 = Monday, etc.
+	$is_today_working_day = in_array($today_day_of_week, $company_setting['hari_kerja']);
 	?>
+	
+	<?php if (!$is_today_working_day): ?>
+	<div class="alert alert-info text-center">
+		<i class="fas fa-calendar-times me-2"></i>
+		<strong>Hari ini bukan hari kerja</strong><br>
+		<small>Presensi hanya dapat dilakukan pada hari kerja yang telah ditentukan.</small>
+	</div>
+	<?php else: ?>
 	<div class="row">
 		<div class="col-6 pe-2">
 			<a id="presensi-masuk" href="#" class="presensi-container box-absen-masuk d-flex rounded-3 px-4 py-4 w-100">
@@ -124,9 +171,13 @@ die; */
 						<p class="mt-0 mb-0 waktu-presensi"><?=$waktu_masuk?></p>
 						<hr class="mt-2 mb-2 w-100"/>
 						<?php
-						$exp = explode(':', $setting_presensi['waktu_masuk_awal']);
+						// Use company-specific time settings if available, otherwise fallback to global
+						$waktu_masuk_awal = $setting_presensi['waktu_masuk_awal'] ?? '08:00:00';
+						$waktu_masuk_akhir = $setting_presensi['waktu_masuk_akhir'] ?? '10:00:00';
+						
+						$exp = explode(':', $waktu_masuk_awal);
 						$waktu_awal = $exp[0] .':' . $exp[1];
-						$exp = explode(':', $setting_presensi['waktu_masuk_akhir']);
+						$exp = explode(':', $waktu_masuk_akhir);
 						$waktu_akhir = $exp[0] .':' . $exp[1];
 						?>
 						<p class="mt-0 mb-0"><?=$waktu_awal?> s.d. <?=$waktu_akhir?></p>
@@ -143,9 +194,13 @@ die; */
 						<p class="mt-0 mb-0 waktu-presensi"><?=$waktu_pulang?></p>
 						<hr class="mt-2 mb-2 w-100"/>
 						<?php
-						$exp = explode(':', $setting_presensi['waktu_pulang_awal']);
+						// Use company-specific time settings if available, otherwise fallback to global
+						$waktu_pulang_awal = $setting_presensi['waktu_pulang_awal'] ?? '16:00:00';
+						$waktu_pulang_akhir = $setting_presensi['waktu_pulang_akhir'] ?? '18:00:00';
+						
+						$exp = explode(':', $waktu_pulang_awal);
 						$waktu_awal = $exp[0] .':' . $exp[1];
-						$exp = explode(':', $setting_presensi['waktu_pulang_akhir']);
+						$exp = explode(':', $waktu_pulang_akhir);
 						$waktu_akhir = $exp[0] .':' . $exp[1];
 						?>
 						<p class="mt-0 mb-0"><?=$waktu_awal?> s.d. <?=$waktu_akhir?></p>
@@ -156,6 +211,7 @@ die; */
 	</div>
 	<div id="alert-lokasi">
 	</div>
+	<?php endif; ?>
 	<p class="text-light mt-4">
 	Riwayat Presensi
 	</p>
@@ -166,7 +222,7 @@ die; */
 			$end_date = strtotime(date('Y-m-d'));
 			$start_date = strtotime('-' . $setting_presensi['jml_riwayat_presensi_home'] . ' days', $end_date);
 			$num = 1;
-			$hari_kerja = json_decode($setting_presensi['hari_kerja'], true);
+			$hari_kerja = $company_setting['hari_kerja'] ?? [1,2,3,4,5];
 			for ($i = $end_date; $i > $start_date; $i = strtotime('-1 day', $i)) {
 		
 				$waktu_masuk = $waktu_pulang = '-';
@@ -188,7 +244,8 @@ die; */
 				}
 				
 				$style = '';
-				if (!in_array($date_w, $hari_kerja)) {
+				$is_working_day = in_array($date_w, $hari_kerja);
+				if (!$is_working_day) {
 					$style = ';color:#CCCCCC !important';
 				}
 				
@@ -230,6 +287,12 @@ die; */
 </div>
 <span id="setting-presensi" style="display:none"><?=json_encode($setting_presensi)?></span>
 <span id="companies-data" style="display:none"><?=json_encode($companies ?? [])?></span>
+<span id="company-setting-data" style="display:none"><?=json_encode($company_setting ?? [])?></span>
+
+<script>
+// Declare companySetting globally for main-mobile.js
+var companySetting = <?=json_encode($company_setting ?? [])?>;
+</script>
 
 <script>
 // GPS-based company auto-detection (anti-cheating)
@@ -255,6 +318,9 @@ die; */
 		return;
 	}
 	
+	// Check if radius location is enabled
+	var gunakanRadiusLokasi = companySetting && companySetting.gunakan_radius_lokasi ? companySetting.gunakan_radius_lokasi : 'Y';
+	
 	// Auto-detect company based on GPS
 	if (navigator.geolocation && typeof assignedCompanies !== 'undefined') {
 		navigator.geolocation.getCurrentPosition(function(position) {
@@ -276,16 +342,31 @@ die; */
 				var radiusNilai = parseFloat(company.radius_nilai);
 				var radiusSatuan = company.radius_satuan;
 				
+				// Use company-specific radius settings if available
+				if (company.setting_data) {
+					radiusNilai = parseFloat(company.setting_data.radius_nilai || company.radius_nilai);
+					radiusSatuan = company.setting_data.radius_satuan || company.radius_satuan;
+				}
+				
 				// Convert radius to kilometers
 				var radiusKm = radiusSatuan === 'm' ? radiusNilai / 1000 : radiusNilai;
 				
 				// Calculate distance
 				var distance = getDistance(userLat, userLon, companyLat, companyLon);
 				
-				// Check if within radius
-				if (distance <= radiusKm && distance < minDistance) {
-					minDistance = distance;
-					nearestCompany = company;
+				// Check if within radius (only if radius checking is enabled)
+				if (gunakanRadiusLokasi === 'N') {
+					// Radius checking disabled - just find nearest company
+					if (distance < minDistance) {
+						minDistance = distance;
+						nearestCompany = company;
+					}
+				} else {
+					// Radius checking enabled - must be within radius
+					if (distance <= radiusKm && distance < minDistance) {
+						minDistance = distance;
+						nearestCompany = company;
+					}
 				}
 			}
 			
@@ -300,7 +381,12 @@ die; */
 				var distanceText = minDistance < 1 
 					? Math.round(minDistance * 1000) + ' meter dari lokasi company'
 					: minDistance.toFixed(2) + ' km dari lokasi company';
-				document.getElementById('detected-company-distance').textContent = 'Anda berada ' + distanceText;
+				
+				if (gunakanRadiusLokasi === 'N') {
+					document.getElementById('detected-company-distance').textContent = 'Anda berada ' + distanceText + ' (Validasi radius dinonaktifkan)';
+				} else {
+					document.getElementById('detected-company-distance').textContent = 'Anda berada ' + distanceText;
+				}
 				
 				// Set hidden field
 				document.getElementById('id_company').value = nearestCompany.id_company;
@@ -335,10 +421,30 @@ die; */
 		});
 	}
 	
-	// Disable presensi buttons if no company detected
+	// Disable presensi buttons if no company detected or not working day
 	if (typeof jQuery !== 'undefined') {
 		jQuery(document).ready(function() {
 			jQuery('.presensi-container').on('click', function(e) {
+				// Check if today is a working day
+				var today = new Date().getDay(); // 0 = Sunday, 1 = Monday, etc.
+				var hariKerja = companySetting && companySetting.hari_kerja ? companySetting.hari_kerja : [1,2,3,4,5];
+				
+				// Ensure integer comparison (handle both string and integer values)
+				var isWorkingDay = hariKerja.some(function(day) {
+					return parseInt(day) === parseInt(today);
+				});
+				
+				if (!isWorkingDay) {
+					e.preventDefault();
+					Swal.fire({
+						icon: 'info',
+						title: 'Hari Libur',
+						text: 'Anda tidak bisa absen di hari libur. Presensi hanya dapat dilakukan pada hari kerja.',
+						confirmButtonText: 'OK'
+					});
+					return false;
+				}
+				
 				var companyId = jQuery('#id_company').val();
 				if (!companyId) {
 					e.preventDefault();

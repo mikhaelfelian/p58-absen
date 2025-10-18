@@ -6,6 +6,7 @@
 */
 
 var map, marker, circle;
+var mapSetting, markerSetting, circleSetting;
 
 $(document).ready(function() {
 	
@@ -108,6 +109,11 @@ $(document).ready(function() {
 		$('#table-result').on('click', '.btn-delete', function() {
 			var id = $(this).data('id');
 			
+			if (!id) {
+				Swal.fire('Error!', 'ID tidak ditemukan. Silahkan refresh halaman dan coba lagi.', 'error');
+				return;
+			}
+			
 			Swal.fire({
 				title: 'Konfirmasi',
 				text: 'Apakah Anda yakin ingin menghapus data ini?',
@@ -120,7 +126,7 @@ $(document).ready(function() {
 			}).then((result) => {
 				if (result.isConfirmed) {
 					$.ajax({
-						url: base_url + module_url + '/ajaxDelete',
+						url: module_url + '/ajaxDelete',
 						type: 'POST',
 						data: {id: id},
 						dataType: 'json',
@@ -132,8 +138,8 @@ $(document).ready(function() {
 								Swal.fire('Error!', response.message, 'error');
 							}
 						},
-						error: function() {
-							Swal.fire('Error!', 'Terjadi kesalahan saat menghapus data', 'error');
+						error: function(xhr, status, error) {
+							Swal.fire('Error!', 'Terjadi kesalahan saat menghapus data: ' + error, 'error');
 						}
 					});
 				}
@@ -221,5 +227,97 @@ function updateCircle() {
 	}).addTo(map);
 	
 	map.fitBounds(circle.getBounds());
+}
+
+// Setting Form Functionality
+function initSettingMap() {
+	if (typeof L === 'undefined') return;
+	
+	var lat = parseFloat($('#setting-latitude').val()) || -7.797068;
+	var lng = parseFloat($('#setting-longitude').val()) || 110.370529;
+	var radius = parseFloat($('#setting-radius-nilai').val()) || 1.0;
+	var satuan = $('#setting-radius-satuan').val() || 'km';
+	
+	// Convert to meters for Leaflet
+	if (satuan === 'km') {
+		radius = radius * 1000;
+	}
+	
+	// Initialize map
+	mapSetting = L.map('map-setting').setView([lat, lng], 15);
+	
+	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+		attribution: '© OpenStreetMap contributors'
+	}).addTo(mapSetting);
+	
+	// Add marker
+	markerSetting = L.marker([lat, lng], {draggable: true}).addTo(mapSetting);
+	
+	// Add circle
+	circleSetting = L.circle([lat, lng], {
+		color: 'blue',
+		fillColor: '#3388ff',
+		fillOpacity: 0.2,
+		radius: radius
+	}).addTo(mapSetting);
+	
+	// Marker drag event
+	markerSetting.on('drag', function(e) {
+		var position = e.target.getLatLng();
+		$('#setting-latitude').val(position.lat.toFixed(6));
+		$('#setting-longitude').val(position.lng.toFixed(6));
+		
+		// Update circle
+		circleSetting.setLatLng(position);
+	});
+	
+	// Map click event
+	mapSetting.on('click', function(e) {
+		var latlng = e.latlng;
+		markerSetting.setLatLng(latlng);
+		$('#setting-latitude').val(latlng.lat.toFixed(6));
+		$('#setting-longitude').val(latlng.lng.toFixed(6));
+		
+		// Update circle
+		circleSetting.setLatLng(latlng);
+	});
+	
+	// Radius change event
+	$('#setting-radius-nilai, #setting-radius-satuan').on('change', function() {
+		updateSettingCircle();
+	});
+}
+
+function updateSettingCircle() {
+	if (!circleSetting) return;
+	
+	var radius = parseFloat($('#setting-radius-nilai').val()) || 1.0;
+	var satuan = $('#setting-radius-satuan').val() || 'km';
+	
+	// Convert to meters for Leaflet
+	if (satuan === 'km') {
+		radius = radius * 1000;
+	}
+	
+	var position = markerSetting.getLatLng();
+	circleSetting.setLatLng(position).setRadius(radius);
+}
+
+// Toggle radius location setting
+$('#gunakan-radius-lokasi').on('change', function() {
+	var value = $(this).val();
+	if (value === 'Y') {
+		$('#row-radius-lokasi-setting').show();
+		if (!mapSetting) {
+			initSettingMap();
+		}
+	} else {
+		$('#row-radius-lokasi-setting').hide();
+	}
+});
+
+// Initialize setting map if radius is enabled
+if ($('#gunakan-radius-lokasi').val() === 'Y') {
+	initSettingMap();
 }
 

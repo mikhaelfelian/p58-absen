@@ -17,7 +17,7 @@ class CompanyModel extends \App\Models\BaseModel
 	protected $allowedFields = [
 		'nama_company', 'alamat', 'id_wilayah_kelurahan', 
 		'latitude', 'longitude', 'radius_nilai', 'radius_satuan',
-		'email', 'no_telp', 'contact_person', 'status', 'keterangan',
+		'email', 'no_telp', 'contact_person', 'status', 'keterangan', 'setting',
 		'id_user_input', 'tgl_input', 'id_user_update', 'tgl_update'
 	];
 	
@@ -60,6 +60,22 @@ class CompanyModel extends \App\Models\BaseModel
 		return $this->db->query($sql)->getResult();
 	}
 	
+	public function getCompanySetting($id_company) {
+		$company = $this->find($id_company);
+		if ($company && isset($company->setting) && $company->setting) {
+			return json_decode($company->setting, true);
+		}
+		return [
+			'hari_kerja' => [1,2,3,4,5],
+			'gunakan_foto_selfi' => 'Y',
+			'gunakan_radius_lokasi' => 'Y',
+			'latitude' => ($company && isset($company->latitude)) ? $company->latitude : '-7.797068',
+			'longitude' => ($company && isset($company->longitude)) ? $company->longitude : '110.370529',
+			'radius_nilai' => ($company && isset($company->radius_nilai)) ? $company->radius_nilai : '1.00',
+			'radius_satuan' => ($company && isset($company->radius_satuan)) ? $company->radius_satuan : 'km'
+		];
+	}
+	
 	public function saveData() {
 		$fields = ['nama_company', 'alamat', 'id_wilayah_kelurahan', 
 				   'latitude', 'longitude', 'radius_nilai', 'radius_satuan',
@@ -71,6 +87,21 @@ class CompanyModel extends \App\Models\BaseModel
 				$data_db[$field] = $this->request->getPost($field);
 			}
 		}
+		
+		// Handle setting JSON data
+		$hari_kerja_post = $this->request->getPost('hari_kerja');
+		$hari_kerja = $hari_kerja_post ? array_map('intval', $hari_kerja_post) : [1,2,3,4,5];
+		
+		$setting_data = [
+			'hari_kerja' => $hari_kerja, // Ensure integers
+			'gunakan_foto_selfi' => $this->request->getPost('gunakan_foto_selfi') ?: 'Y',
+			'gunakan_radius_lokasi' => $this->request->getPost('gunakan_radius_lokasi') ?: 'Y',
+			'latitude' => $this->request->getPost('setting_latitude') ?: $this->request->getPost('latitude'),
+			'longitude' => $this->request->getPost('setting_longitude') ?: $this->request->getPost('longitude'),
+			'radius_nilai' => $this->request->getPost('setting_radius_nilai') ?: $this->request->getPost('radius_nilai'),
+			'radius_satuan' => $this->request->getPost('setting_radius_satuan') ?: $this->request->getPost('radius_satuan')
+		];
+		$data_db['setting'] = json_encode($setting_data);
 		
 		$this->db->transStart();
 		

@@ -7,6 +7,21 @@
 
 $(document).ready(function() {
 	
+	// Form initialization (for add/edit pages)
+	if ($('.form-user-company').length) {
+		// Initialize Select2
+		$('.select2').select2({
+			theme: 'bootstrap-5',
+			width: '100%'
+		});
+		
+		// Initialize Flatpickr for date picker
+		$('.datepicker').flatpickr({
+			dateFormat: 'd-m-Y',
+			locale: 'id'
+		});
+	}
+	
 	// DataTables initialization
 	if ($('#table-result').length) {
 		var column = JSON.parse($('#dataTables-column').text());
@@ -27,6 +42,11 @@ $(document).ready(function() {
 		$('#table-result').on('click', '.btn-delete', function() {
 			var id = $(this).data('id');
 			
+			if (!id) {
+				Swal.fire('Error!', 'ID tidak ditemukan. Silahkan refresh halaman dan coba lagi.', 'error');
+				return;
+			}
+			
 			Swal.fire({
 				title: 'Konfirmasi',
 				text: 'Apakah Anda yakin ingin menghapus assignment ini?',
@@ -39,7 +59,7 @@ $(document).ready(function() {
 			}).then((result) => {
 				if (result.isConfirmed) {
 					$.ajax({
-						url: base_url + module_url + '/ajaxDelete',
+						url: module_url + '/ajaxDelete',
 						type: 'POST',
 						data: {id: id},
 						dataType: 'json',
@@ -51,8 +71,8 @@ $(document).ready(function() {
 								Swal.fire('Error!', response.message, 'error');
 							}
 						},
-						error: function() {
-							Swal.fire('Error!', 'Terjadi kesalahan saat menghapus data', 'error');
+						error: function(xhr, status, error) {
+							Swal.fire('Error!', 'Terjadi kesalahan saat menghapus data: ' + error, 'error');
 						}
 					});
 				}

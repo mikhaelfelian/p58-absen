@@ -3,7 +3,7 @@
 		<div class="d-flex justify-content-between">
 			<div>
 				<?php if (has_permission('create')): ?>
-				<a href="<?=current_url()?>/add" class="btn btn-success btn-xs"><i class="fa fa-plus pe-1"></i> Assign Company ke User</a>
+				<a href="<?=current_url()?>/add" class="btn btn-success btn-xs"><i class="fa fa-plus pe-1"></i> Assign</a>
 				<?php endif; ?>
 			</div>
 		</div>
@@ -24,8 +24,13 @@
 			, 'ignore_action' => 'Aksi'
 		];
 		$th = '';
-		foreach ($column as $val) {
-			$th .= '<th>' . $val . '</th>'; 
+		foreach ($column as $key => $val) {
+			// Hide ID column
+			if ($key == 'ignore_id') {
+				$th .= '<th style="display:none;">' . $val . '</th>'; 
+			} else {
+				$th .= '<th>' . $val . '</th>'; 
+			}
 		}
 		?>
 		<div class="table-responsive">

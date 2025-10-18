@@ -44,6 +44,12 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		$id_user = $this->session->get('user')['id_user'];
 		$companies = $userCompanyModel->getActiveCompanyByUser($id_user);
 		
+		// Load company settings for each company
+		$companyModel = new \App\Models\CompanyModel;
+		foreach ($companies as $company) {
+			$company->setting_data = $companyModel->getCompanySetting($company->id_company);
+		}
+		
 		// Debug: Check if query returns data
 		if (empty($companies)) {
 			// Try to get all assignments without date/status filters for debugging
@@ -97,13 +103,23 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		$setting = $this->data['setting_presensi'];
 		$error = [];
 		
+		// Debug: Log received data
+		log_message('debug', 'Presensi Data: ' . json_encode($data));
+		
 		// Validate company assignment
 		$userCompanyModel = new UserCompanyModel;
 		$id_user = $this->session->get('user')['id_user'];
-		$id_company = $data['id_company'] ?? null;
 		
-		if (!$id_company) {
-			$error[] = 'Company harus dipilih';
+		// Try multiple ways to get id_company
+		$id_company = $data['id_company'] ?? $_POST['id_company'] ?? null;
+		
+		// Debug log
+		log_message('debug', 'ID Company from data: ' . ($data['id_company'] ?? 'NULL'));
+		log_message('debug', 'ID Company from POST: ' . ($_POST['id_company'] ?? 'NULL'));
+		log_message('debug', 'ID Company final: ' . ($id_company ?? 'NULL'));
+		
+		if (!$id_company || $id_company == '' || $id_company == 'null') {
+			$error[] = 'Company harus dipilih. Pastikan Anda berada di lokasi company yang di-assign.';
 		} else {
 			// Check if user has access to this company
 			$hasAccess = $userCompanyModel->checkUserCompanyAccess($id_user, $id_company);
@@ -117,23 +133,35 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 				if (!$company) {
 					$error[] = 'Company tidak ditemukan';
 				} else {
-					// Check radius based on company location
-					$dist = $this->getDistance(
-						$company->latitude, 
-						$company->longitude, 
-						$data['location']['coords']['latitude'], 
-						$data['location']['coords']['longitude']
-					);
+					// Load company settings
+					$companyModel = new \App\Models\CompanyModel;
+					$companySetting = $companyModel->getCompanySetting($id_company);
+					$gunakanRadiusLokasi = $companySetting['gunakan_radius_lokasi'] ?? 'Y';
 					
-					$radius = $company->radius_nilai;
-					if ($company->radius_satuan == 'km') {
-						$radius = $radius * 1000;
+					// Only check radius if enabled in company settings
+					if ($gunakanRadiusLokasi === 'Y') {
+						// Check radius based on company location
+						$dist = $this->getDistance(
+							$company->latitude, 
+							$company->longitude, 
+							$data['location']['coords']['latitude'], 
+							$data['location']['coords']['longitude']
+						);
+						
+						// Use radius from company settings if available, otherwise use company table
+						$radius = isset($companySetting['radius_nilai']) ? $companySetting['radius_nilai'] : $company->radius_nilai;
+						$radiusSatuan = isset($companySetting['radius_satuan']) ? $companySetting['radius_satuan'] : $company->radius_satuan;
+						
+						if ($radiusSatuan == 'km') {
+							$radius = $radius * 1000;
+						}
+						$dist = $dist * 1000;
+						
+						if ($radius < $dist) {
+							$error[] = 'Lokasi Anda diluar radius lokasi absen yang diperbolehkan. Radius lokasi absen adalah ' . $radius . ($radiusSatuan == 'km' ? 'km' : 'm') . ' dari ' . $company->nama_company; 
+						}
 					}
-					$dist = $dist * 1000;
-					
-					if ($radius < $dist) {
-						$error[] = 'Lokasi Anda diluar radius lokasi absen yang diperbolehkan. Radius lokasi absen adalah ' . $company->radius_nilai . $company->radius_satuan . ' dari ' . $company->nama_company . ' (' . $company->latitude . ', ' . $company->longitude . ')'; 
-					}
+					// If gunakan_radius_lokasi = 'N', skip radius validation
 				}
 			}
 		}
