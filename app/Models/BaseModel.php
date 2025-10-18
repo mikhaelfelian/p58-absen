@@ -172,42 +172,57 @@ class BaseModel extends \CodeIgniter\Model
 			return [];
 		}
 		// Menu
-		$sql = 'SELECT * FROM menu 
-					LEFT JOIN menu_role USING (id_menu) 
-					LEFT JOIN module USING (id_module)
-					LEFT JOIN menu_kategori USING(id_menu_kategori)
-				WHERE menu_kategori.aktif = "Y" AND ( id_role IN ( ' . join(',', array_keys($_SESSION['user']['role'])) . ') )
-				ORDER BY menu_kategori.urut, menu.urut';
-						
-		$query_result = $this->db->query($sql)->getResultArray();
-		
-		$current_id = '';
-		$menu = [];
-		foreach ($query_result as $val) 
-		{
-			$menu[$val['id_menu']] = $val;
-			$menu[$val['id_menu']]['highlight'] = 0;
-			$menu[$val['id_menu']]['depth'] = 0;
-
-			if ($current_module == $val['nama_module']) {
-				
-				$current_id = $val['id_menu'];
-				$menu[$val['id_menu']]['highlight'] = 1;
-			}
-			
-		}
+	$sql = 'SELECT menu.*, menu_role.*, module.*, 
+				menu_kategori.id_menu_kategori, 
+				menu_kategori.nama_kategori, 
+				menu_kategori.aktif AS kategori_aktif,
+				menu_kategori.urut AS kategori_urut
+			FROM menu 
+				LEFT JOIN menu_role USING (id_menu) 
+				LEFT JOIN module USING (id_module)
+				LEFT JOIN menu_kategori ON menu.id_menu_kategori = menu_kategori.id_menu_kategori
+			WHERE (menu_kategori.aktif = "Y" OR menu.id_menu_kategori = 0 OR menu.id_menu_kategori IS NULL) 
+				AND ( id_role IN ( ' . join(',', array_keys($_SESSION['user']['role'])) . ') )
+			ORDER BY COALESCE(menu_kategori.urut, 999), menu.urut';
+					
+	$query_result = $this->db->query($sql)->getResultArray();
 	
-		if ($current_id) {
-			$this->menuCurrent($menu, $current_id);
+	$current_id = '';
+	$menu = [];
+	foreach ($query_result as $val) 
+	{
+		// Ensure id_menu_kategori is always set (default to 0 if NULL)
+		if (!isset($val['id_menu_kategori']) || $val['id_menu_kategori'] === NULL) {
+			$val['id_menu_kategori'] = 0;
 		}
 		
-		$menu_kategori = [];
-		foreach ($menu as $id_menu => $val) {
-			if (!$id_menu)
-				continue;
+		$menu[$val['id_menu']] = $val;
+		$menu[$val['id_menu']]['highlight'] = 0;
+		$menu[$val['id_menu']]['depth'] = 0;
+
+		if ($current_module == $val['nama_module']) {
 			
-			$menu_kategori[$val['id_menu_kategori']][$val['id_menu']] = $val;
+			$current_id = $val['id_menu'];
+			$menu[$val['id_menu']]['highlight'] = 1;
 		}
+		
+	}
+
+	if ($current_id) {
+		$this->menuCurrent($menu, $current_id);
+	}
+	
+	$menu_kategori = [];
+	foreach ($menu as $id_menu => $val) {
+		if (!$id_menu)
+			continue;
+		
+		// Safely access id_menu_kategori with fallback to 0
+		$kategori_id = isset($val['id_menu_kategori']) ? $val['id_menu_kategori'] : 0;
+		
+		// Use $id_menu from loop key instead of $val['id_menu'] to avoid undefined key error
+		$menu_kategori[$kategori_id][$id_menu] = $val;
+	}
 		
 		// Kategori
 		$sql = 'SELECT * FROM menu_kategori WHERE aktif = "Y" ORDER BY urut';
