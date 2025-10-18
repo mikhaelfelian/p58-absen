@@ -9,6 +9,80 @@ var map, marker, circle;
 
 $(document).ready(function() {
 	
+	// Current Location Button Handler
+	$('#btn-current-location').on('click', function() {
+		var btn = $(this);
+		var originalHtml = btn.html();
+		
+		// Show loading state
+		btn.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
+		
+		if (navigator.geolocation) {
+			navigator.geolocation.getCurrentPosition(function(position) {
+				var lat = position.coords.latitude;
+				var lng = position.coords.longitude;
+				
+				// Update input fields
+				$('#latitude').val(lat);
+				$('#longitude').val(lng);
+				
+				// Update map if it exists
+				if (typeof map !== 'undefined' && typeof marker !== 'undefined') {
+					var newLatLng = L.latLng(lat, lng);
+					marker.setLatLng(newLatLng);
+					map.setView(newLatLng, 15);
+					
+					// Show success message
+					Swal.fire({
+						icon: 'success',
+						title: 'Lokasi Terdeteksi!',
+						text: 'Lokasi Anda: ' + lat.toFixed(6) + ', ' + lng.toFixed(6),
+						timer: 2000,
+						showConfirmButton: false
+					});
+				}
+				
+				// Restore button
+				btn.html(originalHtml).prop('disabled', false);
+			}, function(error) {
+				// Error handling
+				var errorMsg = 'Gagal mendapatkan lokasi';
+				switch(error.code) {
+					case error.PERMISSION_DENIED:
+						errorMsg = 'Akses lokasi ditolak. Silahkan izinkan akses lokasi di browser.';
+						break;
+					case error.POSITION_UNAVAILABLE:
+						errorMsg = 'Informasi lokasi tidak tersedia.';
+						break;
+					case error.TIMEOUT:
+						errorMsg = 'Request timeout. Silahkan coba lagi.';
+						break;
+				}
+				
+				Swal.fire({
+					icon: 'error',
+					title: 'Gagal!',
+					text: errorMsg
+				});
+				
+				// Restore button
+				btn.html(originalHtml).prop('disabled', false);
+			}, {
+				enableHighAccuracy: true,
+				timeout: 10000,
+				maximumAge: 0
+			});
+		} else {
+			Swal.fire({
+				icon: 'error',
+				title: 'GPS Tidak Didukung!',
+				text: 'Browser Anda tidak mendukung Geolocation.'
+			});
+			btn.html(originalHtml).prop('disabled', false);
+		}
+	});
+	
+	
 	// Initialize Leaflet Map for form
 	if ($('#map').length) {
 		initializeMap();

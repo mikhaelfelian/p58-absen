@@ -39,11 +39,11 @@ class UserCompanyModel extends \App\Models\BaseModel
 		$sql = 'SELECT user_company.*, company.*
 				FROM user_company
 				LEFT JOIN company USING(id_company)
-				WHERE id_user = ? 
+				WHERE user_company.id_user = ? 
 				AND user_company.status = "active"
-				AND company.status = "active"
-				AND (tanggal_mulai IS NULL OR tanggal_mulai <= ?)
-				AND (tanggal_selesai IS NULL OR tanggal_selesai >= ?)
+				AND (company.status = "active" OR company.status IS NULL)
+				AND (user_company.tanggal_mulai IS NULL OR user_company.tanggal_mulai <= ?)
+				AND (user_company.tanggal_selesai IS NULL OR user_company.tanggal_selesai >= ?)
 				ORDER BY company.nama_company';
 		return $this->db->query($sql, [$id_user, $today, $today])->getResult();
 	}

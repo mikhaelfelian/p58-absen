@@ -43,6 +43,37 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		$userCompanyModel = new UserCompanyModel;
 		$id_user = $this->session->get('user')['id_user'];
 		$companies = $userCompanyModel->getActiveCompanyByUser($id_user);
+		
+		// Debug: Check if query returns data
+		if (empty($companies)) {
+			// Try to get all assignments without date/status filters for debugging
+			$sql_debug = 'SELECT user_company.*, company.nama_company, company.status as company_status
+						FROM user_company
+						LEFT JOIN company USING(id_company)
+						WHERE id_user = ?';
+			$debug_result = $this->model->db->query($sql_debug, [$id_user])->getResult();
+			
+			// Store debug info to show in view
+			$this->data['debug_info'] = [
+				'total_assignments' => count($debug_result),
+				'active_companies' => count($companies),
+				'assignments' => $debug_result,
+				'today' => date('Y-m-d')
+			];
+			
+			if (!empty($debug_result)) {
+				foreach ($debug_result as $row) {
+					log_message('debug', 'Company: ' . $row->nama_company . 
+								', Status: ' . $row->status . 
+								', Company Status: ' . ($row->company_status ?? 'NULL') .
+								', Start: ' . ($row->tanggal_mulai ?? 'NULL') . 
+								', End: ' . ($row->tanggal_selesai ?? 'NULL'));
+				}
+			}
+		} else {
+			$this->data['debug_info'] = null;
+		}
+		
 		$this->data['companies'] = $companies;
 	
 		echo view('themes/modern/mobile-presensi-home.php', $this->data);

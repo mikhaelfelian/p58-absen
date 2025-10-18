@@ -28,15 +28,38 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 		<?php else: ?>
 		
 		<form id="form-activity">
-			<div class="mb-3">
-				<label class="form-label">Pilih Company <span class="text-danger">*</span></label>
-				<select class="form-select" id="id_company" name="id_company" required>
-					<option value="">-- Pilih Company --</option>
-					<?php foreach ($companies as $company): ?>
-					<option value="<?=$company->id_company?>"><?=$company->nama_company?></option>
-					<?php endforeach; ?>
-				</select>
+		<div class="mb-3">
+			<label class="form-label">Lokasi Company</label>
+			<!-- Auto-detect company based on GPS location -->
+			<div id="company-detecting" class="text-center py-3 bg-light rounded">
+				<div class="spinner-border text-primary" role="status">
+					<span class="visually-hidden">Loading...</span>
+				</div>
+				<p class="mt-2 mb-0"><small>Mendeteksi lokasi Anda...</small></p>
 			</div>
+			<div id="company-detected" style="display:none;">
+				<div class="alert alert-success mb-0">
+					<i class="fas fa-map-marker-alt me-2"></i>
+					<strong id="detected-company-name"></strong>
+					<br>
+					<small id="detected-company-distance"></small>
+				</div>
+			</div>
+			<div id="company-not-found" style="display:none;">
+				<div class="alert alert-danger mb-0">
+					<i class="fas fa-exclamation-triangle me-2"></i>
+					<strong>Anda tidak berada di lokasi company manapun!</strong>
+					<br>
+					<small>Silahkan pergi ke lokasi company yang sudah di-assign.</small>
+				</div>
+			</div>
+			<input type="hidden" id="id_company" name="id_company" value="">
+		</div>
+		
+		<!-- Store companies data for JavaScript -->
+		<script>
+		var assignedCompanies = <?=json_encode($companies ?? [])?>;
+		</script>
 			
 			<div class="mb-3">
 				<label class="form-label">Judul Activity <span class="text-danger">*</span></label>
@@ -86,6 +109,104 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 </div>
 
 <script>
+// GPS-based company auto-detection (anti-cheating)
+(function() {
+	// Function to calculate distance between two coordinates
+	function getDistance(lat1, lon1, lat2, lon2) {
+		const R = 6371; // Radius of Earth in kilometers
+		const dLat = (lat2 - lat1) * Math.PI / 180;
+		const dLon = (lon2 - lon1) * Math.PI / 180;
+		const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+				  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+				  Math.sin(dLon/2) * Math.sin(dLon/2);
+		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+		const distance = R * c;
+		return distance; // in kilometers
+	}
+	
+	// Auto-detect company based on GPS
+	if (navigator.geolocation && typeof assignedCompanies !== 'undefined') {
+		navigator.geolocation.getCurrentPosition(function(position) {
+			var userLat = position.coords.latitude;
+			var userLon = position.coords.longitude;
+			
+			// Store location globally
+			window.currentLocation = {
+				coords: {
+					latitude: userLat,
+					longitude: userLon
+				}
+			};
+			
+			// Find nearest company within radius
+			var nearestCompany = null;
+			var minDistance = Infinity;
+			
+			for (var i = 0; i < assignedCompanies.length; i++) {
+				var company = assignedCompanies[i];
+				var companyLat = parseFloat(company.latitude);
+				var companyLon = parseFloat(company.longitude);
+				var radiusNilai = parseFloat(company.radius_nilai);
+				var radiusSatuan = company.radius_satuan;
+				
+				// Convert radius to kilometers
+				var radiusKm = radiusSatuan === 'm' ? radiusNilai / 1000 : radiusNilai;
+				
+				// Calculate distance
+				var distance = getDistance(userLat, userLon, companyLat, companyLon);
+				
+				// Check if within radius
+				if (distance <= radiusKm && distance < minDistance) {
+					minDistance = distance;
+					nearestCompany = company;
+				}
+			}
+			
+			// Hide detecting spinner
+			document.getElementById('company-detecting').style.display = 'none';
+			
+			if (nearestCompany) {
+				// Company detected!
+				document.getElementById('company-detected').style.display = 'block';
+				document.getElementById('detected-company-name').textContent = nearestCompany.nama_company;
+				
+				var distanceText = minDistance < 1 
+					? Math.round(minDistance * 1000) + ' meter dari lokasi company'
+					: minDistance.toFixed(2) + ' km dari lokasi company';
+				document.getElementById('detected-company-distance').textContent = 'Anda berada ' + distanceText;
+				
+				// Set hidden field
+				document.getElementById('id_company').value = nearestCompany.id_company;
+			} else {
+				// No company found within radius
+				document.getElementById('company-not-found').style.display = 'block';
+				
+				// Disable submit button
+				var submitBtn = document.getElementById('btn-submit');
+				if (submitBtn) {
+					submitBtn.disabled = true;
+					submitBtn.style.opacity = '0.5';
+				}
+			}
+		}, function(error) {
+			// GPS error
+			document.getElementById('company-detecting').style.display = 'none';
+			document.getElementById('company-not-found').style.display = 'block';
+			var alertDiv = document.getElementById('company-not-found').querySelector('.alert');
+			if (alertDiv) {
+				alertDiv.innerHTML = 
+					'<i class="fas fa-exclamation-triangle me-2"></i>' +
+					'<strong>Gagal mendapatkan lokasi GPS!</strong><br>' +
+					'<small>Pastikan GPS/Location diaktifkan di browser Anda.</small>';
+			}
+		}, {
+			enableHighAccuracy: true,
+			timeout: 10000,
+			maximumAge: 0
+		});
+	}
+})();
+
 // Wait for jQuery to be available
 (function checkJQuery() {
 	if (typeof jQuery === 'undefined') {
@@ -153,7 +274,12 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 		var foto = jQuery('#foto_activity').val();
 		
 		if (!id_company) {
-			showAlert('error', 'Company harus dipilih');
+			Swal.fire({
+				icon: 'error',
+				title: 'Lokasi Invalid!',
+				text: 'Anda tidak berada di lokasi company yang di-assign.',
+				confirmButtonText: 'OK'
+			});
 			return false;
 		}
 		

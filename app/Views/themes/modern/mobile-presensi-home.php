@@ -25,6 +25,7 @@ die; */
 		<i class="fas fa-exclamation-triangle me-2"></i>
 		Anda belum di-assign ke company manapun. Silahkan hubungi admin untuk melakukan assignment.
 	</div>
+	
 	<?php else: ?>
 	<?php
 	// Check if user has already checked in today
@@ -50,7 +51,7 @@ die; */
 	}
 	?>
 	<div class="bg-light p-3 mb-3 rounded-3">
-		<label class="form-label mb-2"><strong>Pilih Company</strong> <span class="text-danger">*</span></label>
+		<label class="form-label mb-2"><strong>Lokasi Company</strong></label>
 		<?php if ($is_readonly): ?>
 		<input type="text" class="form-control" value="<?=$today_company_name?>" readonly>
 		<input type="hidden" id="id_company" name="id_company" value="<?=$today_company_id?>">
@@ -59,21 +60,39 @@ die; */
 			Company sudah terpilih untuk hari ini. Tidak dapat diubah setelah absen masuk.
 		</small>
 		<?php else: ?>
-		<select class="form-select" id="id_company" name="id_company" required>
-			<option value="">-- Pilih Company --</option>
-			<?php foreach ($companies as $company): ?>
-			<option value="<?=$company->id_company?>" 
-					data-latitude="<?=$company->latitude?>" 
-					data-longitude="<?=$company->longitude?>"
-					data-radius="<?=$company->radius_nilai?>"
-					data-satuan="<?=$company->radius_satuan?>">
-				<?=$company->nama_company?>
-			</option>
-			<?php endforeach; ?>
-		</select>
-		<small class="text-muted d-block mt-1">Pilih company tempat Anda bekerja hari ini</small>
+		<!-- Auto-detect company based on GPS location -->
+		<div id="company-detecting" class="text-center py-3">
+			<div class="spinner-border text-primary" role="status">
+				<span class="visually-hidden">Loading...</span>
+			</div>
+			<p class="mt-2 mb-0"><small>Mendeteksi lokasi Anda...</small></p>
+		</div>
+		<div id="company-detected" style="display:none;">
+			<div class="alert alert-success mb-0">
+				<i class="fas fa-map-marker-alt me-2"></i>
+				<strong id="detected-company-name"></strong>
+				<br>
+				<small id="detected-company-distance"></small>
+			</div>
+		</div>
+		<div id="company-not-found" style="display:none;">
+			<div class="alert alert-danger mb-0">
+				<i class="fas fa-exclamation-triangle me-2"></i>
+				<strong>Anda tidak berada di lokasi company manapun!</strong>
+				<br>
+				<small>Silahkan pergi ke lokasi company yang sudah di-assign.</small>
+			</div>
+		</div>
+		<input type="hidden" id="id_company" name="id_company" value="">
+		<input type="hidden" id="detected-latitude" value="">
+		<input type="hidden" id="detected-longitude" value="">
 		<?php endif; ?>
 	</div>
+	
+	<!-- Store companies data for JavaScript -->
+	<script>
+	var assignedCompanies = <?=json_encode($companies ?? [])?>;
+	</script>
 	<?php endif; ?>
 	
 	<?php
@@ -213,73 +232,127 @@ die; */
 <span id="companies-data" style="display:none"><?=json_encode($companies ?? [])?></span>
 
 <script>
-// Wait for jQuery to load
-(function checkjQuery() {
-	if (typeof jQuery === 'undefined') {
-		setTimeout(checkjQuery, 50);
+// GPS-based company auto-detection (anti-cheating)
+(function() {
+	// Function to calculate distance between two coordinates
+	function getDistance(lat1, lon1, lat2, lon2) {
+		const R = 6371; // Radius of Earth in kilometers
+		const dLat = (lat2 - lat1) * Math.PI / 180;
+		const dLon = (lon2 - lon1) * Math.PI / 180;
+		const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+				  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+				  Math.sin(dLon/2) * Math.sin(dLon/2);
+		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+		const distance = R * c;
+		return distance; // in kilometers
+	}
+	
+	// Check if company is already locked (readonly mode)
+	var companyInput = document.getElementById('id_company');
+	if (companyInput && companyInput.type === 'hidden' && companyInput.value) {
+		// Already assigned, set hidden fields
+		document.getElementById('selected-company-id').value = companyInput.value;
 		return;
 	}
 	
-	// Initialize company data from hidden input if already selected
-	var companySelect = jQuery('#id_company');
-	if (companySelect.is('input[type="hidden"]')) {
-		// Company is locked (readonly mode)
-		var companyId = companySelect.val();
-		if (companyId) {
-			// Get company data from companies-data span
-			var companiesData = JSON.parse(jQuery('#companies-data').text() || '[]');
-			var selectedCompany = companiesData.find(function(c) { return c.id_company == companyId; });
-			if (selectedCompany) {
-				jQuery('#selected-company-id').val(companyId);
-				jQuery('#selected-company-lat').val(selectedCompany.latitude);
-				jQuery('#selected-company-lng').val(selectedCompany.longitude);
-				jQuery('#selected-company-radius').val(selectedCompany.radius_nilai);
-				jQuery('#selected-company-satuan').val(selectedCompany.radius_satuan);
-			}
-		}
-	} else {
-		// Company is selectable (dropdown mode)
-		// Handle company selection
-		companySelect.on('change', function() {
-			var selectedOption = jQuery(this).find('option:selected');
-			jQuery('#selected-company-id').val(jQuery(this).val());
-			jQuery('#selected-company-lat').val(selectedOption.data('latitude'));
-			jQuery('#selected-company-lng').val(selectedOption.data('longitude'));
-			jQuery('#selected-company-radius').val(selectedOption.data('radius'));
-			jQuery('#selected-company-satuan').val(selectedOption.data('satuan'));
+	// Auto-detect company based on GPS
+	if (navigator.geolocation && typeof assignedCompanies !== 'undefined') {
+		navigator.geolocation.getCurrentPosition(function(position) {
+			var userLat = position.coords.latitude;
+			var userLon = position.coords.longitude;
 			
-			// Show alert with company info
-			if (jQuery(this).val()) {
-				var companyName = selectedOption.text();
-				var radius = selectedOption.data('radius');
-				var satuan = selectedOption.data('satuan');
-				jQuery('#alert-lokasi').html(
-					'<div class="alert alert-info mt-3">' +
-					'<i class="fas fa-info-circle me-2"></i>' +
-					'Anda akan absen di <strong>' + companyName + '</strong>. ' +
-					'Pastikan Anda berada dalam radius <strong>' + radius + ' ' + satuan + '</strong> dari lokasi company.' +
-					'</div>'
-				);
-			} else {
-				jQuery('#alert-lokasi').html('');
+			// Store user location
+			document.getElementById('detected-latitude').value = userLat;
+			document.getElementById('detected-longitude').value = userLon;
+			
+			// Find nearest company within radius
+			var nearestCompany = null;
+			var minDistance = Infinity;
+			
+			for (var i = 0; i < assignedCompanies.length; i++) {
+				var company = assignedCompanies[i];
+				var companyLat = parseFloat(company.latitude);
+				var companyLon = parseFloat(company.longitude);
+				var radiusNilai = parseFloat(company.radius_nilai);
+				var radiusSatuan = company.radius_satuan;
+				
+				// Convert radius to kilometers
+				var radiusKm = radiusSatuan === 'm' ? radiusNilai / 1000 : radiusNilai;
+				
+				// Calculate distance
+				var distance = getDistance(userLat, userLon, companyLat, companyLon);
+				
+				// Check if within radius
+				if (distance <= radiusKm && distance < minDistance) {
+					minDistance = distance;
+					nearestCompany = company;
+				}
 			}
+			
+			// Hide detecting spinner
+			document.getElementById('company-detecting').style.display = 'none';
+			
+			if (nearestCompany) {
+				// Company detected!
+				document.getElementById('company-detected').style.display = 'block';
+				document.getElementById('detected-company-name').textContent = nearestCompany.nama_company;
+				
+				var distanceText = minDistance < 1 
+					? Math.round(minDistance * 1000) + ' meter dari lokasi company'
+					: minDistance.toFixed(2) + ' km dari lokasi company';
+				document.getElementById('detected-company-distance').textContent = 'Anda berada ' + distanceText;
+				
+				// Set hidden field
+				document.getElementById('id_company').value = nearestCompany.id_company;
+				document.getElementById('selected-company-id').value = nearestCompany.id_company;
+				document.getElementById('selected-company-lat').value = nearestCompany.latitude;
+				document.getElementById('selected-company-lng').value = nearestCompany.longitude;
+				document.getElementById('selected-company-radius').value = nearestCompany.radius_nilai;
+				document.getElementById('selected-company-satuan').value = nearestCompany.radius_satuan;
+			} else {
+				// No company found within radius
+				document.getElementById('company-not-found').style.display = 'block';
+				
+				// Disable presensi buttons
+				var presensiButtons = document.querySelectorAll('.presensi-container');
+				presensiButtons.forEach(function(btn) {
+					btn.style.opacity = '0.5';
+					btn.style.pointerEvents = 'none';
+				});
+			}
+		}, function(error) {
+			// GPS error
+			document.getElementById('company-detecting').style.display = 'none';
+			document.getElementById('company-not-found').style.display = 'block';
+			document.getElementById('company-not-found').querySelector('.alert').innerHTML = 
+				'<i class="fas fa-exclamation-triangle me-2"></i>' +
+				'<strong>Gagal mendapatkan lokasi GPS!</strong><br>' +
+				'<small>Pastikan GPS/Location diaktifkan di browser Anda.</small>';
+		}, {
+			enableHighAccuracy: true,
+			timeout: 10000,
+			maximumAge: 0
 		});
 	}
 	
-	// Disable presensi buttons if no company selected
-	jQuery('.presensi-container').on('click', function(e) {
-		var companyId = jQuery('#selected-company-id').val();
-		if (!companyId) {
-			e.preventDefault();
-			Swal.fire({
-				icon: 'warning',
-				title: 'Perhatian!',
-				text: 'Silahkan pilih company terlebih dahulu',
-				confirmButtonText: 'OK'
+	// Disable presensi buttons if no company detected
+	if (typeof jQuery !== 'undefined') {
+		jQuery(document).ready(function() {
+			jQuery('.presensi-container').on('click', function(e) {
+				var companyId = jQuery('#id_company').val();
+				if (!companyId) {
+					e.preventDefault();
+					Swal.fire({
+						icon: 'error',
+						title: 'Tidak Dapat Absen!',
+						text: 'Anda tidak berada di lokasi company yang di-assign.',
+						confirmButtonText: 'OK'
+					});
+					return false;
+				}
 			});
-			return false;
-		}
-	});
+		});
+	}
 })();
 </script>
 <?= $this->endSection() ?>

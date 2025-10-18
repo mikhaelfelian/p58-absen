@@ -134,31 +134,78 @@ if (@$styles) {
 					<p class="mb-0"><?=$data_setelah_nama_user?></p>
 				</div>
 			</div>
-			<nav class="mt-3">
-				<ul class="nav nav-pills flex-column">
-					<?php
-					if (key_exists(46, $_SESSION['user']['all_permission'])) {
-						?>
-						<li class="nav-item">
-							<a class="nav-link link-dark py-3 px-3 link-dashboard" href="<?=base_url() . '/dashboard'?>">
-								<i class="fas fa-tachometer-alt me-2"></i>Dashboard
-							</a>
-						</li>
-					<?php
+		<nav class="mt-3">
+			<ul class="nav nav-pills flex-column">
+				<?php
+				// Helper function for mobile menu rendering (define first)
+				if (!function_exists('build_menu_mobile')) {
+					function build_menu_mobile($current_module, $menu, $level = 0) {
+						$html = '';
+						foreach ($menu as $key => $val) {
+							$url = $val['url'];
+							$active = '';
+							
+							// Check if current menu is active
+							if (isset($val['nama_module'])) {
+								if ($val['nama_module'] == $current_module) {
+									$active = 'active';
+								}
+							}
+							
+							// Icon
+							$icon = '';
+							if (!empty($val['icon'])) {
+								$icon = '<i class="' . $val['icon'] . ' me-2"></i>';
+							}
+							
+							// Build menu item
+							$html .= '<li class="nav-item">';
+							$html .= '<a class="nav-link link-dark py-3 px-3 ' . $active . '" href="' . $url . '">';
+							$html .= $icon . $val['nama_menu'];
+							
+							// Show "NEW" badge if applicable
+							if (!empty($val['new']) && $val['new'] == 1) {
+								$html .= ' <span class="badge bg-danger">NEW</span>';
+							}
+							
+							$html .= '</a>';
+							$html .= '</li>';
+							
+							// Render submenu if exists
+							if (!empty($val['submenu'])) {
+								$html .= '<ul class="nav flex-column ms-3">';
+								$html .= build_menu_mobile($current_module, $val['submenu'], $level + 1);
+								$html .= '</ul>';
+							}
+						}
+						return $html;
 					}
-					?>
-					<li class="nav-item">
-						<a class="nav-link link-dark py-3 px-3" href="<?=base_url() . 'presensi-rekap'?>">
-							<i class="fas fa-list-check me-2"></i>Rekap Presensi
-						</a>
-					</li>
-					<li class="nav-item">
-						<a class="nav-link link-dark py-3 px-3" href="<?=base_url() . 'presensi-riwayat'?>">
-							<i class="far fa-calendar me-2"></i>Riwayat Presensi
-						</a>
-					</li>
-				</ul>
-			</nav>
+				}
+				
+				// Dynamic menu from database (same as desktop sidebar)
+				foreach ($menu as $val) {
+					$list_menu = menu_list($val['menu']);
+					if ($list_menu) {
+						$kategori = $val['kategori'];
+						// Show category title if enabled
+						if ($kategori['show_title'] == 'Y') {
+							echo '<li class="nav-item">
+									<div class="px-3 pt-3 pb-2">
+										<small class="text-muted text-uppercase fw-bold">' . $kategori['nama_kategori'] . '</small>';
+							if ($kategori['deskripsi']) {
+								echo '<br><small class="text-muted" style="font-size:0.7rem">' . $kategori['deskripsi'] . '</small>';
+							}
+							echo '</div>
+								</li>';
+						}
+						
+						// Render menu items
+						echo build_menu_mobile($current_module, $list_menu);
+					}
+				}
+				?>
+			</ul>
+		</nav>
 		</div>
 	</div>
 

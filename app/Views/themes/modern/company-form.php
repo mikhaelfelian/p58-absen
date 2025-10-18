@@ -57,19 +57,28 @@
 				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label">Lokasi GPS <span class="text-danger">*</span></label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
 					<div class="row mb-2">
-						<div class="col-6">
+						<div class="col-5">
 							<label>Latitude</label>
 							<input type="text" class="form-control" name="latitude" id="latitude" value="<?=@$company->latitude ?: '-7.797068'?>" required>
 							<?php if (!empty($form_errors['latitude'])) echo '<small class="text-danger">' . $form_errors['latitude'] . '</small>'?>
 						</div>
-						<div class="col-6">
+						<div class="col-5">
 							<label>Longitude</label>
 							<input type="text" class="form-control" name="longitude" id="longitude" value="<?=@$company->longitude ?: '110.370529'?>" required>
 							<?php if (!empty($form_errors['longitude'])) echo '<small class="text-danger">' . $form_errors['longitude'] . '</small>'?>
 						</div>
+						<div class="col-2">
+							<label>&nbsp;</label>
+							<button type="button" class="btn btn-info btn-sm w-100" id="btn-current-location" title="Gunakan lokasi saya">
+								<i class="fas fa-crosshairs"></i>
+							</button>
+						</div>
 					</div>
 					<div id="map" style="height: 400px; border: 1px solid #ddd; border-radius: 4px;"></div>
-					<small class="text-muted">Klik pada peta untuk memilih lokasi atau drag marker</small>
+					<small class="text-muted">
+						<i class="fas fa-info-circle me-1"></i>
+						Klik pada peta untuk memilih lokasi, drag marker, atau klik tombol <i class="fas fa-crosshairs"></i> untuk gunakan lokasi Anda saat ini
+					</small>
 				</div>
 			</div>
 			
