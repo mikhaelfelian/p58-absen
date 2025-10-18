@@ -69,4 +69,4 @@ public/files/~$Format Data Barang.xlsx
 
 # Dotfiles
 .env
-.htaccess
+/.htaccess
