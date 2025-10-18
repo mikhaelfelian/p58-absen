@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository 
+      - name: Checkout Repository
         uses: actions/checkout@v3
 
       - name: Setup SSH Connection
@@ -21,9 +21,23 @@ jobs:
       - name: Deploy Code to Server
         run: |
           ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-            cd ${{ secrets.DEPLOY_PATH }} &&
-            git pull origin main &&
-            exit"
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo '--- Start Deploy ---'
+            if [ ! -d .git ]; then
+              echo 'No git repo found, cloning fresh...'
+              git clone -b main git@github.com:${{ github.repository }} .
+            else
+              echo 'Git repo found, pulling latest...'
+              git fetch --all
+              git reset --hard origin/main
+              git clean -fd
+            fi
+
+            echo '✅ Deploy finished successfully.'
+            exit
+          "
 
       - name: Notify Deployment Completion to GitHub Issue
         env:
@@ -35,7 +49,7 @@ jobs:
           response=$(curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"body\": \"**✅ Berhasil Deploy ke Development Server**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Link**: [Lihat](http://dev.kopmensa.com)\\n\\nSilahkan lihat di server.\"}" \
+            -d "{\"body\": \"**✅ Berhasil Deploy ke Development Server**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Server Path**: \`${{ secrets.DEPLOY_PATH }}\`\\n\\nSilakan cek hasil di server.\"}" \
             https://api.github.com/repos/$REPO/issues/1/comments)
           echo "API response from comment creation: $response"
 
