@@ -19,6 +19,63 @@ die; */
 			<div class="text-end" id="live-jam"><?=date('H:i:s')?></div>
 		</div>
 	</div>
+	
+	<?php if (empty($companies)): ?>
+	<div class="alert alert-warning">
+		<i class="fas fa-exclamation-triangle me-2"></i>
+		Anda belum di-assign ke company manapun. Silahkan hubungi admin untuk melakukan assignment.
+	</div>
+	<?php else: ?>
+	<?php
+	// Check if user has already checked in today
+	$curr_date = date('Y-m-d');
+	$today_company_id = null;
+	$today_company_name = '';
+	$is_readonly = false;
+	
+	if (key_exists($curr_date, $riwayat_presensi)) {
+		if (key_exists('masuk', $riwayat_presensi[$curr_date])) {
+			if (!empty($riwayat_presensi[$curr_date]['masuk']['id_company'])) {
+				$today_company_id = $riwayat_presensi[$curr_date]['masuk']['id_company'];
+				$is_readonly = true;
+				// Get company name
+				foreach ($companies as $comp) {
+					if ($comp->id_company == $today_company_id) {
+						$today_company_name = $comp->nama_company;
+						break;
+					}
+				}
+			}
+		}
+	}
+	?>
+	<div class="bg-light p-3 mb-3 rounded-3">
+		<label class="form-label mb-2"><strong>Pilih Company</strong> <span class="text-danger">*</span></label>
+		<?php if ($is_readonly): ?>
+		<input type="text" class="form-control" value="<?=$today_company_name?>" readonly>
+		<input type="hidden" id="id_company" name="id_company" value="<?=$today_company_id?>">
+		<small class="text-success d-block mt-1">
+			<i class="fas fa-lock me-1"></i>
+			Company sudah terpilih untuk hari ini. Tidak dapat diubah setelah absen masuk.
+		</small>
+		<?php else: ?>
+		<select class="form-select" id="id_company" name="id_company" required>
+			<option value="">-- Pilih Company --</option>
+			<?php foreach ($companies as $company): ?>
+			<option value="<?=$company->id_company?>" 
+					data-latitude="<?=$company->latitude?>" 
+					data-longitude="<?=$company->longitude?>"
+					data-radius="<?=$company->radius_nilai?>"
+					data-satuan="<?=$company->radius_satuan?>">
+				<?=$company->nama_company?>
+			</option>
+			<?php endforeach; ?>
+		</select>
+		<small class="text-muted d-block mt-1">Pilih company tempat Anda bekerja hari ini</small>
+		<?php endif; ?>
+	</div>
+	<?php endif; ?>
+	
 	<?php
 	$waktu_masuk = $waktu_pulang = 'Belum absen';
 	$curr_date = date('Y-m-d');
@@ -146,6 +203,83 @@ die; */
 			?>
 		</div>
 	<input type="hidden" id="page-type" value="kasir"/>
+	<input type="hidden" id="selected-company-id" value=""/>
+	<input type="hidden" id="selected-company-lat" value=""/>
+	<input type="hidden" id="selected-company-lng" value=""/>
+	<input type="hidden" id="selected-company-radius" value=""/>
+	<input type="hidden" id="selected-company-satuan" value=""/>
 </div>
 <span id="setting-presensi" style="display:none"><?=json_encode($setting_presensi)?></span>
+<span id="companies-data" style="display:none"><?=json_encode($companies ?? [])?></span>
+
+<script>
+// Wait for jQuery to load
+(function checkjQuery() {
+	if (typeof jQuery === 'undefined') {
+		setTimeout(checkjQuery, 50);
+		return;
+	}
+	
+	// Initialize company data from hidden input if already selected
+	var companySelect = jQuery('#id_company');
+	if (companySelect.is('input[type="hidden"]')) {
+		// Company is locked (readonly mode)
+		var companyId = companySelect.val();
+		if (companyId) {
+			// Get company data from companies-data span
+			var companiesData = JSON.parse(jQuery('#companies-data').text() || '[]');
+			var selectedCompany = companiesData.find(function(c) { return c.id_company == companyId; });
+			if (selectedCompany) {
+				jQuery('#selected-company-id').val(companyId);
+				jQuery('#selected-company-lat').val(selectedCompany.latitude);
+				jQuery('#selected-company-lng').val(selectedCompany.longitude);
+				jQuery('#selected-company-radius').val(selectedCompany.radius_nilai);
+				jQuery('#selected-company-satuan').val(selectedCompany.radius_satuan);
+			}
+		}
+	} else {
+		// Company is selectable (dropdown mode)
+		// Handle company selection
+		companySelect.on('change', function() {
+			var selectedOption = jQuery(this).find('option:selected');
+			jQuery('#selected-company-id').val(jQuery(this).val());
+			jQuery('#selected-company-lat').val(selectedOption.data('latitude'));
+			jQuery('#selected-company-lng').val(selectedOption.data('longitude'));
+			jQuery('#selected-company-radius').val(selectedOption.data('radius'));
+			jQuery('#selected-company-satuan').val(selectedOption.data('satuan'));
+			
+			// Show alert with company info
+			if (jQuery(this).val()) {
+				var companyName = selectedOption.text();
+				var radius = selectedOption.data('radius');
+				var satuan = selectedOption.data('satuan');
+				jQuery('#alert-lokasi').html(
+					'<div class="alert alert-info mt-3">' +
+					'<i class="fas fa-info-circle me-2"></i>' +
+					'Anda akan absen di <strong>' + companyName + '</strong>. ' +
+					'Pastikan Anda berada dalam radius <strong>' + radius + ' ' + satuan + '</strong> dari lokasi company.' +
+					'</div>'
+				);
+			} else {
+				jQuery('#alert-lokasi').html('');
+			}
+		});
+	}
+	
+	// Disable presensi buttons if no company selected
+	jQuery('.presensi-container').on('click', function(e) {
+		var companyId = jQuery('#selected-company-id').val();
+		if (!companyId) {
+			e.preventDefault();
+			Swal.fire({
+				icon: 'warning',
+				title: 'Perhatian!',
+				text: 'Silahkan pilih company terlebih dahulu',
+				confirmButtonText: 'OK'
+			});
+			return false;
+		}
+	});
+})();
+</script>
 <?= $this->endSection() ?>

@@ -8,6 +8,7 @@
 
 namespace App\Controllers;
 use App\Models\MobilePresensiHomeModel;
+use App\Models\UserCompanyModel;
 
 class Mobile_presensi_home extends \App\Controllers\BaseController
 {
@@ -37,6 +38,12 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		}
 		
 		$this->data['riwayat_presensi'] = $riwayat_presensi;
+		
+		// Get active companies for this user
+		$userCompanyModel = new UserCompanyModel;
+		$id_user = $this->session->get('user')['id_user'];
+		$companies = $userCompanyModel->getActiveCompanyByUser($id_user);
+		$this->data['companies'] = $companies;
 	
 		echo view('themes/modern/mobile-presensi-home.php', $this->data);
 	}
@@ -59,16 +66,44 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		$setting = $this->data['setting_presensi'];
 		$error = [];
 		
-		if ($setting['gunakan_radius_lokasi'] == 'Y') {
-			$dist = $this->getDistance($setting['latitude'], $setting['longitude'], $data['location']['coords']['latitude'], $data['location']['coords']['longitude']);
-			
-			$radius = $setting['radius_nilai'];
-			if ($setting['radius_satuan'] == 'km') {
-				$radius = $radius * 1000;
-			}
-			$dist = $dist * 1000;
-			if ($radius < $dist) {
-				$error[] = 'Lokasi Anda diluar radius lokasi absen yang diperbolehkan. Radius lokasi absen adalah ' . $setting['radius_nilai'] . $setting['radius_satuan'] . ' dari kantor (' . $setting['latitude'] . ', ' . $setting['longitude']; 
+		// Validate company assignment
+		$userCompanyModel = new UserCompanyModel;
+		$id_user = $this->session->get('user')['id_user'];
+		$id_company = $data['id_company'] ?? null;
+		
+		if (!$id_company) {
+			$error[] = 'Company harus dipilih';
+		} else {
+			// Check if user has access to this company
+			$hasAccess = $userCompanyModel->checkUserCompanyAccess($id_user, $id_company);
+			if (!$hasAccess) {
+				$error[] = 'Anda tidak memiliki akses ke company ini';
+			} else {
+				// Get company location and radius
+				$sql = 'SELECT * FROM company WHERE id_company = ?';
+				$company = $this->model->db->query($sql, [$id_company])->getRow();
+				
+				if (!$company) {
+					$error[] = 'Company tidak ditemukan';
+				} else {
+					// Check radius based on company location
+					$dist = $this->getDistance(
+						$company->latitude, 
+						$company->longitude, 
+						$data['location']['coords']['latitude'], 
+						$data['location']['coords']['longitude']
+					);
+					
+					$radius = $company->radius_nilai;
+					if ($company->radius_satuan == 'km') {
+						$radius = $radius * 1000;
+					}
+					$dist = $dist * 1000;
+					
+					if ($radius < $dist) {
+						$error[] = 'Lokasi Anda diluar radius lokasi absen yang diperbolehkan. Radius lokasi absen adalah ' . $company->radius_nilai . $company->radius_satuan . ' dari ' . $company->nama_company . ' (' . $company->latitude . ', ' . $company->longitude . ')'; 
+					}
+				}
 			}
 		}
 		
@@ -99,6 +134,7 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		} else {
 		
 			$data['id_user'] = $this->session->get('user')['id_user'];
+			$data['id_company'] = $id_company;
 			
 			$data_inserted = $this->model->saveDataPresensi($data);
 			// $data_inserted = true;

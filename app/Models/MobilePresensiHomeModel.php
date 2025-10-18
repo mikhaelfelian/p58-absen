@@ -20,7 +20,8 @@ class MobilePresensiHomeModel extends \App\Models\BaseModel
 		$sql = 'SELECT *, MIN(IF(jenis_presensi = "masuk", waktu, null)) AS presensi_masuk,
 						MAX(IF(jenis_presensi = "pulang", waktu, null)) AS presensi_pulang,
 						MAX(IF(jenis_presensi = "masuk", batas_waktu_presensi, null)) AS batas_presensi_masuk,
-						MIN(IF(jenis_presensi = "pulang", batas_waktu_presensi, null)) AS batas_presensi_pulang
+						MIN(IF(jenis_presensi = "pulang", batas_waktu_presensi, null)) AS batas_presensi_pulang,
+						MAX(IF(jenis_presensi = "masuk", id_company, null)) AS id_company
 				FROM user_presensi 
 				WHERE tanggal >= "' . $start_date . '" AND tanggal <= "' . $end_date . '" AND id_user = ' . service('session')->get('user')['id_user'] . '
 				GROUP BY tanggal';
@@ -39,6 +40,11 @@ class MobilePresensiHomeModel extends \App\Models\BaseModel
 					'jenis_presensi' => $data['jenis_presensi'],
 					'raw_lokasi' => json_encode($data['location'])
 				];
+		
+		// Add company ID if provided
+		if (isset($data['id_company'])) {
+			$data_db['id_company'] = $data['id_company'];
+		}
 		
 		if ($data['foto']) {
 			$nama_file = str_replace(' ', '_', $this->session->get('user')['nama']) . '_' . date('Ymd_His_') . gettimeofday()['usec'] . '.jpeg';

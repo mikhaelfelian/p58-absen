@@ -1,0 +1,49 @@
+/**
+*	App Name	: Aplikasi Absensi Online	
+*	Author		: Agus Prawoto Hadi
+*	Website		: https://jagowebdev.com
+*	Year		: 2024
+*/
+
+/* Mobile Activity Styles */
+.activity-form {
+    padding: 1rem;
+}
+
+#camera-container {
+    text-align: center;
+}
+
+#my_camera {
+    margin: 0 auto;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#preview-container {
+    text-align: center;
+}
+
+#preview-image {
+    max-width: 100%;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+}
+
+.alert-container {
+    margin-top: 1rem;
+}
+
+.activity-card {
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.activity-photo {
+    max-width: 100%;
+    border-radius: 8px;
+    margin-top: 0.5rem;
+}
+
