@@ -20,11 +20,10 @@ CI_ENVIRONMENT = development
 # APP
 #--------------------------------------------------------------------
 
-app.baseURL = 'http://localhost/p58-absen/'
-app.baseURL = 'http://localhost/p58-absen/'
-app.imagesURL = 'http://localhost/p58-absen/public/images/'
+app.baseURL = 'https://absen.tigerasoft.com/'
+app.imagesURL = 'https://absen.tigerasoft.com/public/images/'
 
-app.name                        = 'Kaldera'
+app.name                        = 'Absensi Online'
 app.version                     = '1.0.0'
 app.domain                      = 'kaldera.com'
 app.timezone                    = 'Asia/Jakarta'
@@ -42,10 +41,10 @@ app.CSPEnabled                  = false
 #--------------------------------------------------------------------
 
 # database.default.hostname = localhost
-# database.default.database = db_p58_absen
-# database.default.username = root
-# database.default.password = 
-# database.default.DBDriver = MySQLi
+database.default.database = mikhaelf_db_absen
+database.default.username = mikhaelf_user
+database.default.password = ALfa*$7512
+database.default.DBDriver = MySQLi
 # database.default.DBPrefix =
 database.default.port = 3306
 
@@ -70,7 +69,7 @@ encryption.key              = 'hex2bin:c2f4a5b3d8e9c7f6a1b2d3e4f5a6b7c8d9e0f1a2b
 # SESSION
 #--------------------------------------------------------------------
 session.driver              = 'CodeIgniter\Session\Handlers\DatabaseHandler'
-session.cookieName          = 'kaldera_session'
+session.cookieName          = 'tcs_session'
 session.expiration          = 25200
 session.savePath            = 'tbl_sessions'
 session.matchIP             = false
