@@ -54,7 +54,7 @@ php_errors.log
 #user_guide_src/cilexer/pycilexer.egg-info/*
 
 # Don't save phpunit under version control.
-phpunit
+# phpunit
 
 #-------------------------
 # Composer
