@@ -16,7 +16,18 @@ jobs:
       - name: Install lftp
         run: |
           sudo apt-get update
-          sudo apt-get install -y lftp
+          sudo apt-get install -y lftp openssh-client
+
+      - name: Add SFTP Host to known_hosts
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+        run: |
+          echo "Adding $FTP_HOST:$FTP_PORT to known_hosts..."
+          mkdir -p ~/.ssh
+          ssh-keyscan -p $FTP_PORT $FTP_HOST >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          echo "✅ Host key added successfully."
 
       - name: Deploy Code via SFTP
         env:
@@ -26,9 +37,10 @@ jobs:
           FTP_PORT: ${{ secrets.FTP_PORT }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          echo "Starting SFTP deployment..."
+          echo "🚀 Starting SFTP deployment..."
           lftp -c "
-            open -u \"$FTP_USER\",\"$FTP_PASSWORD\" sftp://$FTP_HOST:$FTP_PORT;
+            set sftp:connect-program 'ssh -p $FTP_PORT';
+            open -u \"$FTP_USER\",\"$FTP_PASSWORD\" sftp://$FTP_HOST;
             mirror -R --delete --exclude .git/ --exclude .github/ ./ $DEPLOY_PATH
           "
           echo "✅ Deploy finished successfully."
@@ -40,18 +52,18 @@ jobs:
           SHA: ${{ github.sha }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          echo "Starting to create issue comment..."
+          echo "💬 Creating deployment comment..."
           response=$(curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             -d "{\"body\": \"**✅ Berhasil Deploy ke Development Server (SFTP)**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Server Path**: \`$DEPLOY_PATH\`\\n\\nSilakan cek hasil di server.\"}" \
             https://api.github.com/repos/$REPO/issues/1/comments)
-          echo "API response from comment creation: $response"
+          echo "API response (comment): $response"
 
-          echo "Starting to assign assignee..."
+          echo "👤 Assigning issue to @alfianharisusatya..."
           assign_response=$(curl -X PATCH \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             -d "{\"assignees\": [\"alfianharisusatya\"]}" \
             https://api.github.com/repos/$REPO/issues/1)
-          echo "API response from assignee assignment: $assign_response"
+          echo "API response (assign): $assign_response"
