@@ -1,0 +1,68 @@
+name: Deploy and Notify
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup SSH keys
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy Code to Server
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          ssh -o StrictHostKeyChecking=no -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "
+            set -e
+            cd \"$DEPLOY_PATH\"
+
+            echo '--- Start Deploy ---'
+            if [ ! -d .git ]; then
+              echo 'No git repo found, cloning fresh...'
+              git clone -b main https://github.com/${{ github.repository }} .
+            else
+              echo 'Git repo found, pulling latest...'
+              git fetch --all
+              git reset --hard origin/main
+              git clean -fd
+            fi
+
+            echo '✅ Deploy finished successfully.'
+            exit
+          "
+
+      - name: Notify Deployment Completion to GitHub Issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKENS }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          echo "Starting to create issue comment..."
+          response=$(curl -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"body\": \"**✅ Berhasil Deploy ke Development Server**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Server Path**: \`$DEPLOY_PATH\`\\n\\nSilakan cek hasil di server.\"}" \
+            https://api.github.com/repos/$REPO/issues/1/comments)
+          echo "API response from comment creation: $response"
+
+          echo "Starting to assign assignee..."
+          assign_response=$(curl -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"assignees\": [\"alfianharisusatya\"]}" \
+            https://api.github.com/repos/$REPO/issues/1)
+          echo "API response from assignee assignment: $assign_response"
