@@ -16,34 +16,26 @@ jobs:
       - name: Install lftp
         run: |
           sudo apt-get update
-          sudo apt-get install -y lftp openssh-client
+          sudo apt-get install -y lftp
 
-      - name: Add SFTP Host to known_hosts
-        env:
-          FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_PORT: ${{ secrets.FTP_PORT }}
-        run: |
-          echo "Adding $FTP_HOST:$FTP_PORT to known_hosts..."
-          mkdir -p ~/.ssh
-          ssh-keyscan -p $FTP_PORT $FTP_HOST >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-          echo "✅ Host key added successfully."
-
-      - name: Deploy Code via SFTP
+      - name: Deploy Code via FTP
         env:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_PORT: ${{ secrets.FTP_PORT }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          echo "🚀 Starting SFTP deployment..."
+          echo "🚀 Starting FTP deployment..."
           lftp -c "
-            set sftp:connect-program 'ssh -p $FTP_PORT';
-            open -u \"$FTP_USER\",\"$FTP_PASSWORD\" sftp://$FTP_HOST;
-            mirror -R --delete --exclude .git/ --exclude .github/ ./ $DEPLOY_PATH
+            set ftp:ssl-allow no;
+            set ftp:passive-mode on;
+            set net:max-retries 2;
+            set net:timeout 15;
+            open -u \"$FTP_USER\",\"$FTP_PASSWORD\" ftp://$FTP_HOST;
+            mirror -R --delete --exclude .git/ --exclude .github/ ./ $DEPLOY_PATH;
+            bye
           "
-          echo "✅ Deploy finished successfully."
+          echo "✅ FTP deploy finished successfully."
 
       - name: Notify Deployment Completion to GitHub Issue
         env:
@@ -53,17 +45,8 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           echo "💬 Creating deployment comment..."
-          response=$(curl -X POST \
+          curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"body\": \"**✅ Berhasil Deploy ke Development Server (SFTP)**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Server Path**: \`$DEPLOY_PATH\`\\n\\nSilakan cek hasil di server.\"}" \
-            https://api.github.com/repos/$REPO/issues/1/comments)
-          echo "API response (comment): $response"
-
-          echo "👤 Assigning issue to @alfianharisusatya..."
-          assign_response=$(curl -X PATCH \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"assignees\": [\"alfianharisusatya\"]}" \
-            https://api.github.com/repos/$REPO/issues/1)
-          echo "API response (assign): $assign_response"
+            -d "{\"body\": \"**✅ Berhasil Deploy via FTP ke Server Dapanel**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Server Path**: \`$DEPLOY_PATH\`\\n\\nSilakan cek hasil di server.\"}" \
+            https://api.github.com/repos/$REPO/issues/1/comments
