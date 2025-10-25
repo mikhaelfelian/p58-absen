@@ -13,36 +13,25 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Setup SSH keys
-        uses: webfactory/ssh-agent@v0.5.3
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Deploy Code to Server
-        env:
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
+      - name: Install lftp
         run: |
-          ssh -o StrictHostKeyChecking=no -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "
-            set -e
-            cd \"$DEPLOY_PATH\"
+          sudo apt-get update
+          sudo apt-get install -y lftp
 
-            echo '--- Start Deploy ---'
-            if [ ! -d .git ]; then
-              echo 'No git repo found, cloning fresh...'
-              git clone -b main https://github.com/${{ github.repository }} .
-            else
-              echo 'Git repo found, pulling latest...'
-              git fetch --all
-              git reset --hard origin/main
-              git clean -fd
-            fi
-
-            echo '✅ Deploy finished successfully.'
-            exit
+      - name: Deploy Code via SFTP
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_PORT: ${{ secrets.FTP_PORT }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          echo "Starting SFTP deployment..."
+          lftp -c "
+            open -u \"$FTP_USER\",\"$FTP_PASSWORD\" sftp://$FTP_HOST:$FTP_PORT;
+            mirror -R --delete --exclude .git/ --exclude .github/ ./ $DEPLOY_PATH
           "
+          echo "✅ Deploy finished successfully."
 
       - name: Notify Deployment Completion to GitHub Issue
         env:
@@ -55,7 +44,7 @@ jobs:
           response=$(curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"body\": \"**✅ Berhasil Deploy ke Development Server**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Server Path**: \`$DEPLOY_PATH\`\\n\\nSilakan cek hasil di server.\"}" \
+            -d "{\"body\": \"**✅ Berhasil Deploy ke Development Server (SFTP)**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Server Path**: \`$DEPLOY_PATH\`\\n\\nSilakan cek hasil di server.\"}" \
             https://api.github.com/repos/$REPO/issues/1/comments)
           echo "API response from comment creation: $response"
 
