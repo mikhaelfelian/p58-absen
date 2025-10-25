@@ -8,12 +8,15 @@
 
 namespace App\Controllers;
 use App\Models\CompanyModel;
+use App\Models\CompanyPatrolModel;
+use App\Libraries\BarcodeGenerator;
 
 class Company extends BaseController
 {
 	public function __construct() {
 		parent::__construct();
 		$this->model = new CompanyModel;
+		$this->patrolModel = new CompanyPatrolModel;
 		$this->data['title'] = 'Master Company';
 		
 		// Add required JS/CSS
@@ -89,6 +92,7 @@ class Company extends BaseController
 		$this->data['company'] = $company;
 		$this->data['form_errors'] = [];
 		$this->data['company_setting'] = $this->model->getCompanySetting($company->id_company);
+		$this->data['existing_patrols'] = $this->patrolModel->getPatrolByCompany($company->id_company);
 		$this->view('company-form.php', $this->data);
 	}
 	
@@ -176,6 +180,64 @@ class Company extends BaseController
 		
 		$result['data'] = $query['data'];
 		echo json_encode($result);
+	}
+	
+	/**
+	 * Generate barcode image for a patrol point
+	 */
+	public function generateBarcode($patrol_id)
+	{
+		$patrol = $this->patrolModel->find($patrol_id);
+		if (!$patrol) {
+			show_404();
+		}
+		
+		$barcodeGenerator = new BarcodeGenerator();
+		$filepath = $barcodeGenerator->generateBarcodeImage($patrol['barcode']);
+		
+		// Return the image
+		$image = file_get_contents($filepath);
+		$this->response->setContentType('image/png');
+		$this->response->setBody($image);
+		return $this->response;
+	}
+	
+	/**
+	 * Print all barcodes for a company as PDF
+	 */
+	public function printBarcodes($company_id)
+	{
+		$company = $this->model->getCompanyById($company_id);
+		if (!$company) {
+			show_404();
+		}
+		
+		$patrol_points = $this->patrolModel->getPatrolByCompany($company_id);
+		if (empty($patrol_points)) {
+			$this->data['message'] = ['status' => 'error', 'message' => 'Tidak ada titik patroli untuk dicetak'];
+			$this->view('company-list.php', $this->data);
+			return;
+		}
+		
+		$barcodeGenerator = new BarcodeGenerator();
+		$barcodeGenerator->generatePrintablePDF($patrol_points, $company->nama_company);
+	}
+	
+	/**
+	 * Get barcode as base64 for display
+	 */
+	public function getBarcodeBase64($patrol_id)
+	{
+		$patrol = $this->patrolModel->find($patrol_id);
+		if (!$patrol) {
+			echo json_encode(['status' => 'error', 'message' => 'Patrol point not found']);
+			return;
+		}
+		
+		$barcodeGenerator = new BarcodeGenerator();
+		$base64 = $barcodeGenerator->generateBarcodeBase64($patrol['barcode']);
+		
+		echo json_encode(['status' => 'ok', 'barcode_image' => $base64]);
 	}
 }
 

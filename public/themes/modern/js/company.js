@@ -5,115 +5,85 @@
 *	Year		: 2024
 */
 
-var map, marker, circle;
-var mapSetting, markerSetting, circleSetting;
+// Faster, more responsive update for map/radius/location
 
-$(document).ready(function() {
-	
-	// Current Location Button Handler
+let map, marker, circle;
+let mapSetting, markerSetting, circleSetting;
+
+$(function() {
+
+	//=========== FAST: Current Location Button ===========//
 	$('#btn-current-location').on('click', function() {
-		var btn = $(this);
-		var originalHtml = btn.html();
-		
-		// Show loading state
+		const btn = $(this);
+		const origHtml = btn.html();
+
 		btn.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
-		
-		if (navigator.geolocation) {
-			navigator.geolocation.getCurrentPosition(function(position) {
-				var lat = position.coords.latitude;
-				var lng = position.coords.longitude;
-				
-				// Update input fields
-				$('#latitude').val(lat);
-				$('#longitude').val(lng);
-				
-				// Update map if it exists
-				if (typeof map !== 'undefined' && typeof marker !== 'undefined') {
-					var newLatLng = L.latLng(lat, lng);
-					marker.setLatLng(newLatLng);
-					map.setView(newLatLng, 15);
-					
-					// Show success message
-					Swal.fire({
-						icon: 'success',
-						title: 'Lokasi Terdeteksi!',
-						text: 'Lokasi Anda: ' + lat.toFixed(6) + ', ' + lng.toFixed(6),
-						timer: 2000,
-						showConfirmButton: false
-					});
-				}
-				
-				// Restore button
-				btn.html(originalHtml).prop('disabled', false);
-			}, function(error) {
-				// Error handling
-				var errorMsg = 'Gagal mendapatkan lokasi';
-				switch(error.code) {
-					case error.PERMISSION_DENIED:
-						errorMsg = 'Akses lokasi ditolak. Silahkan izinkan akses lokasi di browser.';
-						break;
-					case error.POSITION_UNAVAILABLE:
-						errorMsg = 'Informasi lokasi tidak tersedia.';
-						break;
-					case error.TIMEOUT:
-						errorMsg = 'Request timeout. Silahkan coba lagi.';
-						break;
-				}
-				
-				Swal.fire({
-					icon: 'error',
-					title: 'Gagal!',
-					text: errorMsg
-				});
-				
-				// Restore button
-				btn.html(originalHtml).prop('disabled', false);
-			}, {
-				enableHighAccuracy: true,
-				timeout: 10000,
-				maximumAge: 0
-			});
-		} else {
-			Swal.fire({
-				icon: 'error',
-				title: 'GPS Tidak Didukung!',
-				text: 'Browser Anda tidak mendukung Geolocation.'
-			});
-			btn.html(originalHtml).prop('disabled', false);
+
+		if (!navigator.geolocation) {
+			Swal.fire({icon:'error',title:'GPS Tidak Didukung!','text':'Browser Anda tidak mendukung Geolocation.'});
+			btn.html(origHtml).prop('disabled', false);
+			return;
 		}
-	});
-	
-	
-	// Initialize Leaflet Map for form
-	if ($('#map').length) {
-		initializeMap();
-	}
-	
-	// DataTables initialization
-	if ($('#table-result').length) {
-		var column = JSON.parse($('#dataTables-column').text());
-		var settings = JSON.parse($('#dataTables-setting').text());
-		var url = $('#dataTables-url').text();
-		
-		settings.processing = true;
-		settings.serverSide = true;
-		settings.ajax = {
-			url: url,
-			type: 'POST'
+
+		let geoWatch = null;
+		let locationUpdate = (position) => {
+			let lat = position.coords.latitude, lng = position.coords.longitude;
+			$('#latitude').val(lat);
+			$('#longitude').val(lng);
+			if (map && marker) {
+				const latlng = L.latLng(lat, lng);
+				marker.setLatLng(latlng);
+				map.setView(latlng, 15, {animate:true});
+				Swal.fire({
+					icon: 'success',
+					title: 'Lokasi Terdeteksi!',
+					text: 'Lokasi Anda: ' + lat.toFixed(6) + ', ' + lng.toFixed(6),
+					timer: 1200,
+					showConfirmButton: false
+				});
+			}
+			btn.html(origHtml).prop('disabled', false);
+			// Hentikan watch setelah update pertama
+			if (geoWatch) navigator.geolocation.clearWatch(geoWatch);
 		};
-		settings.columns = column;
-		
-		var table = $('#table-result').DataTable(settings);
-		
-		// Delete button handler
+
+		let locationError = (error) => {
+			let msg = 'Gagal mendapatkan lokasi';
+			if (error.code === error.PERMISSION_DENIED)
+				msg = 'Akses lokasi ditolak. Silahkan izinkan akses lokasi di browser.';
+			else if (error.code === error.POSITION_UNAVAILABLE)
+				msg = 'Informasi lokasi tidak tersedia.';
+			else if (error.code === error.TIMEOUT)
+				msg = 'Request timeout. Silahkan coba lagi.';
+			Swal.fire({icon:'error',title:'Gagal!',text:msg});
+			btn.html(origHtml).prop('disabled', false);
+			if (geoWatch) navigator.geolocation.clearWatch(geoWatch);
+		};
+
+		geoWatch = navigator.geolocation.watchPosition(locationUpdate, locationError, {
+			enableHighAccuracy: true, timeout: 7000, maximumAge: 0
+		});
+	});
+
+	//=========== FAST: Leaflet Map for Form ===========//
+	if ($('#map').length) initMapFast();
+
+	//=========== FAST: DataTables ===========//
+	if ($('#table-result').length) {
+		const col = JSON.parse($('#dataTables-column').text());
+		const set = JSON.parse($('#dataTables-setting').text());
+		const url = $('#dataTables-url').text();
+		set.processing = true; set.serverSide = true;
+		set.ajax = {url: url, type:'POST'};
+		set.columns = col;
+		const table = $('#table-result').DataTable(set);
+
 		$('#table-result').on('click', '.btn-delete', function() {
-			var id = $(this).data('id');
-			
+			const id = $(this).data('id');
 			if (!id) {
 				Swal.fire('Error!', 'ID tidak ditemukan. Silahkan refresh halaman dan coba lagi.', 'error');
 				return;
 			}
-			
 			Swal.fire({
 				title: 'Konfirmasi',
 				text: 'Apakah Anda yakin ingin menghapus data ini?',
@@ -125,199 +95,271 @@ $(document).ready(function() {
 				cancelButtonText: 'Batal'
 			}).then((result) => {
 				if (result.isConfirmed) {
-					$.ajax({
-						url: module_url + '/ajaxDelete',
-						type: 'POST',
-						data: {id: id},
-						dataType: 'json',
-						success: function(response) {
-							if (response.status == 'ok') {
-								Swal.fire('Berhasil!', response.message, 'success');
-								table.ajax.reload();
-							} else {
-								Swal.fire('Error!', response.message, 'error');
-							}
-						},
-						error: function(xhr, status, error) {
-							Swal.fire('Error!', 'Terjadi kesalahan saat menghapus data: ' + error, 'error');
+					$.post(module_url + '/ajaxDelete', {id}, function(response) {
+						if (response.status == 'ok') {
+							Swal.fire('Berhasil!', response.message, 'success');
+							table.ajax.reload(null, false);
+						} else {
+							Swal.fire('Error!', response.message, 'error');
 						}
+					},'json').fail(function(xhr,stat,err){
+						Swal.fire('Error!', 'Terjadi kesalahan saat menghapus data: '+err, 'error');
 					});
 				}
 			});
 		});
 	}
-	
-	// Form validation
+
+	//=========== FAST: Form Validation ===========//
 	$('.form-company').on('submit', function(e) {
-		var latitude = $('#latitude').val();
-		var longitude = $('#longitude').val();
-		var radius = $('input[name="radius_nilai"]').val();
-		
-		if (!latitude || !longitude) {
+		let lat = $('#latitude').val(),
+			lng = $('#longitude').val(),
+			rad = $('input[name="radius_nilai"]').val();
+		if (!lat || !lng) {
 			e.preventDefault();
-			Swal.fire('Error!', 'Lokasi GPS harus diisi', 'error');
+			Swal.fire('Error!','Lokasi GPS harus diisi','error');
 			return false;
 		}
-		
-		if (!radius || parseFloat(radius) <= 0) {
+		if (!rad || parseFloat(rad) <= 0) {
 			e.preventDefault();
-			Swal.fire('Error!', 'Radius harus lebih dari 0', 'error');
+			Swal.fire('Error!','Radius harus lebih dari 0','error');
 			return false;
 		}
 	});
 });
 
-function initializeMap() {
-	var lat = parseFloat($('#latitude').val()) || -7.797068;
-	var lng = parseFloat($('#longitude').val()) || 110.370529;
-	
-	// Initialize map
+//=============== FAST MAP FUNC ===============//
+
+function initMapFast() {
+	const $lat = $('#latitude'), $lng = $('#longitude'), $rad = $('input[name="radius_nilai"]'), $unit = $('select[name="radius_satuan"]');
+	let lat = parseFloat($lat.val()) || -7.797068,
+		lng = parseFloat($lng.val()) || 110.370529;
 	map = L.map('map').setView([lat, lng], 13);
-	
-	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-		attribution: '© OpenStreetMap contributors'
-	}).addTo(map);
-	
-	// Add marker
-	marker = L.marker([lat, lng], {draggable: true}).addTo(map);
-	
-	// Add circle for radius
-	updateCircle();
-	
-	// Update coordinates when marker is dragged
-	marker.on('dragend', function(e) {
-		var position = marker.getLatLng();
-		$('#latitude').val(position.lat.toFixed(6));
-		$('#longitude').val(position.lng.toFixed(6));
-		updateCircle();
+	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap contributors'}).addTo(map);
+	marker = L.marker([lat, lng], {draggable:true}).addTo(map);
+
+	updateCircleFast();
+
+	marker.on('drag', function(e) {
+		const pos = e.target.getLatLng();
+		$lat.val(pos.lat.toFixed(6));
+		$lng.val(pos.lng.toFixed(6));
+		updateCircleFast();
 	});
-	
-	// Update marker when clicking on map
-	map.on('click', function(e) {
-		marker.setLatLng(e.latlng);
-		$('#latitude').val(e.latlng.lat.toFixed(6));
-		$('#longitude').val(e.latlng.lng.toFixed(6));
-		updateCircle();
+	map.on('click', function(e){
+		const pos = e.latlng;
+		marker.setLatLng(pos);
+		$lat.val(pos.lat.toFixed(6));
+		$lng.val(pos.lng.toFixed(6));
+		updateCircleFast();
 	});
-	
-	// Update circle when radius changes
-	$('input[name="radius_nilai"], select[name="radius_satuan"]').on('change', function() {
-		updateCircle();
-	});
+
+	$rad.add($unit).on('input change', updateCircleFast);
 }
 
-function updateCircle() {
-	if (circle) {
-		map.removeLayer(circle);
-	}
-	
-	var radius = parseFloat($('input[name="radius_nilai"]').val()) || 1;
-	var satuan = $('select[name="radius_satuan"]').val();
-	
-	if (satuan == 'km') {
-		radius = radius * 1000;
-	}
-	
-	var position = marker.getLatLng();
-	circle = L.circle(position, {
-		color: 'red',
-		fillColor: '#f03',
-		fillOpacity: 0.2,
-		radius: radius
+function updateCircleFast() {
+	if (circle) map.removeLayer(circle);
+	let radius = parseFloat($('input[name="radius_nilai"]').val())||1;
+	let satuan = $('select[name="radius_satuan"]').val();
+	if (satuan == 'km') radius = radius * 1000;
+	const pos = marker.getLatLng();
+	circle = L.circle(pos, {
+		color:'red', fillColor:'#f03', fillOpacity:0.2, radius: radius
 	}).addTo(map);
-	
-	map.fitBounds(circle.getBounds());
+	map.fitBounds(circle.getBounds(), {animate:false});
 }
 
-// Setting Form Functionality
+//=============== FAST: Setting Map ===============//
 function initSettingMap() {
 	if (typeof L === 'undefined') return;
-	
-	var lat = parseFloat($('#setting-latitude').val()) || -7.797068;
-	var lng = parseFloat($('#setting-longitude').val()) || 110.370529;
-	var radius = parseFloat($('#setting-radius-nilai').val()) || 1.0;
-	var satuan = $('#setting-radius-satuan').val() || 'km';
-	
-	// Convert to meters for Leaflet
-	if (satuan === 'km') {
-		radius = radius * 1000;
-	}
-	
-	// Initialize map
+	const $lat = $('#setting-latitude'), $lng = $('#setting-longitude'),
+		  $rad = $('#setting-radius-nilai'), $unit = $('#setting-radius-satuan');
+	let lat = parseFloat($lat.val()) || -7.797068,
+		lng = parseFloat($lng.val()) || 110.370529;
+	let radius = parseFloat($rad.val()) || 1.0;
+	let satuan = $unit.val() || 'km';
+	if (satuan === 'km') radius = radius * 1000;
+
 	mapSetting = L.map('map-setting').setView([lat, lng], 15);
-	
-	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-		attribution: '© OpenStreetMap contributors'
-	}).addTo(mapSetting);
-	
-	// Add marker
-	markerSetting = L.marker([lat, lng], {draggable: true}).addTo(mapSetting);
-	
-	// Add circle
+	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap contributors'}).addTo(mapSetting);
+
+	markerSetting = L.marker([lat, lng], {draggable:true}).addTo(mapSetting);
 	circleSetting = L.circle([lat, lng], {
-		color: 'blue',
-		fillColor: '#3388ff',
-		fillOpacity: 0.2,
-		radius: radius
+		color:'blue', fillColor:'#3388ff', fillOpacity:.2, radius:radius
 	}).addTo(mapSetting);
-	
-	// Marker drag event
-	markerSetting.on('drag', function(e) {
-		var position = e.target.getLatLng();
-		$('#setting-latitude').val(position.lat.toFixed(6));
-		$('#setting-longitude').val(position.lng.toFixed(6));
-		
-		// Update circle
-		circleSetting.setLatLng(position);
+
+	markerSetting.on('drag',function(e){
+		let pos = e.target.getLatLng();
+		$lat.val(pos.lat.toFixed(6));
+		$lng.val(pos.lng.toFixed(6));
+		circleSetting.setLatLng(pos);
 	});
-	
-	// Map click event
-	mapSetting.on('click', function(e) {
-		var latlng = e.latlng;
-		markerSetting.setLatLng(latlng);
-		$('#setting-latitude').val(latlng.lat.toFixed(6));
-		$('#setting-longitude').val(latlng.lng.toFixed(6));
-		
-		// Update circle
-		circleSetting.setLatLng(latlng);
+	mapSetting.on('click',function(e){
+		let pos = e.latlng;
+		markerSetting.setLatLng(pos);
+		$lat.val(pos.lat.toFixed(6));
+		$lng.val(pos.lng.toFixed(6));
+		circleSetting.setLatLng(pos);
 	});
-	
-	// Radius change event
-	$('#setting-radius-nilai, #setting-radius-satuan').on('change', function() {
-		updateSettingCircle();
-	});
+	$rad.add($unit).on('input change', updateSettingCircleFast);
 }
 
-function updateSettingCircle() {
+function updateSettingCircleFast() {
 	if (!circleSetting) return;
-	
-	var radius = parseFloat($('#setting-radius-nilai').val()) || 1.0;
-	var satuan = $('#setting-radius-satuan').val() || 'km';
-	
-	// Convert to meters for Leaflet
-	if (satuan === 'km') {
-		radius = radius * 1000;
-	}
-	
-	var position = markerSetting.getLatLng();
-	circleSetting.setLatLng(position).setRadius(radius);
+	let radius = parseFloat($('#setting-radius-nilai').val()) || 1.0,
+		satuan = $('#setting-radius-satuan').val() || 'km';
+	if (satuan === 'km') radius = radius * 1000;
+	let pos = markerSetting.getLatLng();
+	circleSetting.setLatLng(pos).setRadius(radius);
 }
 
-// Toggle radius location setting
+//=============== FAST: Toggle radius location ===============//
 $('#gunakan-radius-lokasi').on('change', function() {
-	var value = $(this).val();
-	if (value === 'Y') {
+	let v = $(this).val();
+	if (v === 'Y') {
 		$('#row-radius-lokasi-setting').show();
-		if (!mapSetting) {
-			initSettingMap();
-		}
+		if (!mapSetting) setTimeout(initSettingMap,20);
 	} else {
 		$('#row-radius-lokasi-setting').hide();
 	}
 });
+if ($('#gunakan-radius-lokasi').val() === 'Y') initSettingMap();
 
-// Initialize setting map if radius is enabled
-if ($('#gunakan-radius-lokasi').val() === 'Y') {
-	initSettingMap();
+// Patrol Points Management
+var patrolCounter = 0;
+
+$(document).ready(function() {
+	// Add patrol point button
+	$('#btn-add-patrol').on('click', function() {
+		addPatrolPoint();
+	});
+	
+	// Load existing patrol points if editing
+	loadExistingPatrolPoints();
+});
+
+function addPatrolPoint() {
+	patrolCounter++;
+	var patrolId = 'patrol_' + patrolCounter;
+	
+	var patrolHtml = `
+		<div class="patrol-item border rounded p-3 mb-3 bg-white" data-patrol-id="${patrolId}">
+			<div class="row">
+				<div class="col-12">
+					<div class="d-flex justify-content-between align-items-center mb-2">
+						<h6 class="mb-0 fw-semibold text-dark">
+							<i class="fas fa-map-marker-alt me-2"></i>Titik Patroli #${patrolCounter}
+						</h6>
+						<button type="button" class="btn btn-danger btn-sm btn-remove-patrol" data-patrol-id="${patrolId}">
+							<i class="fas fa-trash"></i>
+						</button>
+					</div>
+				</div>
+			</div>
+			
+			<div class="row">
+				<div class="col-md-6 mb-2">
+					<label class="form-label fw-medium">Nama Titik Patroli <span class="text-danger">*</span></label>
+					<input type="text" class="form-control" name="patrol[${patrolCounter}][nama_patrol]" required>
+				</div>
+				<div class="col-md-6 mb-2">
+					<label class="form-label fw-medium">Foto</label>
+					<input type="file" class="form-control" name="patrol[${patrolCounter}][foto]" accept="image/*">
+				</div>
+			</div>
+		</div>
+	`;
+	
+	$('#patrol-container').append(patrolHtml);
+	$('#no-patrol-message').hide();
+	
+	// Bind events
+	bindPatrolEvents(patrolId);
+}
+
+// Removed map functions - not needed for simplified version
+
+function bindPatrolEvents(patrolId) {
+	// Remove patrol point
+	$(`[data-patrol-id="${patrolId}"] .btn-remove-patrol`).on('click', function() {
+		removePatrolPoint(patrolId);
+	});
+}
+
+function removePatrolPoint(patrolId) {
+	Swal.fire({
+		title: 'Konfirmasi',
+		text: 'Apakah Anda yakin ingin menghapus titik patroli ini?',
+		icon: 'warning',
+		showCancelButton: true,
+		confirmButtonColor: '#d33',
+		cancelButtonColor: '#3085d6',
+		confirmButtonText: 'Ya, Hapus!',
+		cancelButtonText: 'Batal'
+	}).then((result) => {
+		if (result.isConfirmed) {
+			// Remove HTML element
+			$(`[data-patrol-id="${patrolId}"]`).remove();
+			
+			// Show no patrol message if no patrols left
+			if ($('.patrol-item').length === 0) {
+				$('#no-patrol-message').show();
+			}
+		}
+	});
+}
+
+function loadExistingPatrolPoints() {
+	// This will be populated by the controller with existing patrol data
+	var existingPatrols = window.existingPatrols || [];
+	
+	if (existingPatrols.length > 0) {
+		existingPatrols.forEach(function(patrol, index) {
+			patrolCounter = index + 1;
+			var patrolId = 'patrol_' + patrolCounter;
+			
+			var patrolHtml = `
+				<div class="patrol-item border rounded p-3 mb-3 bg-white" data-patrol-id="${patrolId}">
+					<div class="row">
+						<div class="col-12">
+							<div class="d-flex justify-content-between align-items-center mb-2">
+								<h6 class="mb-0 fw-semibold text-dark">
+									<i class="fas fa-map-marker-alt me-2"></i>Titik Patroli #${patrolCounter}
+								</h6>
+								<button type="button" class="btn btn-danger btn-sm btn-remove-patrol" data-patrol-id="${patrolId}">
+									<i class="fas fa-trash"></i>
+								</button>
+							</div>
+						</div>
+					</div>
+					
+					<div class="row">
+						<div class="col-md-6 mb-2">
+							<label class="form-label fw-medium">Nama Titik Patroli <span class="text-danger">*</span></label>
+							<input type="text" class="form-control" name="patrol[${patrolCounter}][nama_patrol]" value="${patrol.nama_patrol || ''}" required>
+						</div>
+						<div class="col-md-6 mb-2">
+							<label class="form-label fw-medium">Foto</label>
+							<input type="file" class="form-control" name="patrol[${patrolCounter}][foto]" accept="image/*">
+							${patrol.foto ? '<small class="text-muted">Current: ' + patrol.foto + '</small>' : ''}
+						</div>
+					</div>
+					
+					${patrol.barcode ? '<div class="row"><div class="col-12 mb-2"><label class="form-label fw-medium">Barcode</label><div class="form-control-plaintext text-center"><img id="barcode-img-' + patrolId + '" src="" alt="Barcode" class="img-fluid" style="max-width: 200px;"><br><small class="text-muted">' + patrol.barcode + '</small><br><button type="button" class="btn btn-sm btn-outline-primary mt-1" onclick="printBarcode(\'' + patrol.barcode + '\')"><i class="fas fa-print me-1"></i>Print</button></div></div></div>' : ''}
+				</div>
+			`;
+			
+			$('#patrol-container').append(patrolHtml);
+			$('#no-patrol-message').hide();
+			
+			// Bind events
+			bindPatrolEvents(patrolId);
+			
+			// Load barcode image if exists
+			if (patrol.barcode) {
+				loadBarcodeImage(patrolId, patrol.barcode);
+			}
+		});
+	}
 }
 

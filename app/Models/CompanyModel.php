@@ -117,6 +117,13 @@ class CompanyModel extends \App\Models\BaseModel
 			$id_company = $this->db->insertID();
 		}
 		
+		// Handle patrol points
+		$patrol_data = $this->request->getPost('patrol');
+		if ($patrol_data && is_array($patrol_data)) {
+			$patrolModel = new \App\Models\CompanyPatrolModel();
+			$patrolModel->savePatrolPoints($id_company, $patrol_data);
+		}
+		
 		$this->db->transComplete();
 		
 		if ($this->db->transStatus() === false) {

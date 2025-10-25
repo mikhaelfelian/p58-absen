@@ -188,7 +188,45 @@
 					</select>
 					<small class="text-muted fw-medium">Jika Ya, maka presensi harus dilakukan didalam radius yang telah ditetapkan</small>
 				</div>
-			</div>			
+			</div>
+
+			<!-- Patrol Points Section -->
+			<div class="row mb-3">
+				<div class="col-12">
+					<div class="bg-light p-3 ps-4 mb-3 rounded">
+						<h5 class="m-0 fw-semibold text-dark">
+							<i class="fas fa-map-marker-alt me-2"></i>Titik Patroli
+						</h5>
+						<small class="text-muted">Tentukan titik-titik patroli untuk perusahaan ini (opsional)</small>
+					</div>
+				</div>
+			</div>
+
+			<div class="row mb-3">
+				<div class="col-12">
+					<div class="card border-0 bg-light">
+						<div class="card-body">
+							<div class="d-flex justify-content-between align-items-center mb-3">
+								<h6 class="mb-0 fw-semibold text-dark">
+									<i class="fas fa-route me-2"></i>Daftar Titik Patroli
+								</h6>
+								<button type="button" class="btn btn-success btn-sm" id="btn-add-patrol">
+									<i class="fas fa-plus me-1"></i>Tambah Titik
+								</button>
+							</div>
+							
+							<div id="patrol-container">
+								<!-- Patrol points will be added here dynamically -->
+							</div>
+							
+							<div id="no-patrol-message" class="text-center text-muted py-4" style="display: none;">
+								<i class="fas fa-map-marker-alt fa-2x mb-2"></i>
+								<p class="mb-0">Belum ada titik patroli. Klik "Tambah Titik" untuk menambahkan.</p>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>	
 			<div class="row mb-3">
 				<div class="col-sm-8 col-md-6 col-lg-5 offset-sm-3 offset-md-2 offset-lg-3 offset-xl-2">
 					<button type="submit" name="submit" value="true" class="btn btn-primary">Simpan</button>
@@ -198,3 +236,8 @@
 		</form>
 	</div>
 </div>
+
+<script>
+// Pass existing patrol data to JavaScript
+window.existingPatrols = <?=json_encode($existing_patrols ?? [])?>;
+</script>
