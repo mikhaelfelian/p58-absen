@@ -26,6 +26,36 @@
 				show_message($message);
 			}
 		?>
+		
+		<?php if (!empty($message)): ?>
+		<script>
+		$(document).ready(function() {
+			<?php if ($message['status'] == 'success'): ?>
+			// Show success message with SweetAlert
+			Swal.fire({
+				icon: 'success',
+				title: 'Berhasil!',
+				text: '<?= $message['message'] ?>',
+				timer: 3000,
+				showConfirmButton: false,
+				toast: true,
+				position: 'top-end'
+			});
+			<?php elseif ($message['status'] == 'error'): ?>
+			// Show error message with SweetAlert
+			Swal.fire({
+				icon: 'error',
+				title: 'Gagal!',
+				text: '<?= $message['message'] ?>',
+				confirmButtonText: 'OK'
+			});
+			<?php endif; ?>
+			
+			// Scroll to top to show the message
+			$('html, body').animate({scrollTop: 0}, 500);
+		});
+		</script>
+		<?php endif; ?>
 		<form method="post" action="" class="form-company">
 			<input type="hidden" name="id" value="<?=@$company->id_company?>">
 			
@@ -210,9 +240,16 @@
 								<h6 class="mb-0 fw-semibold text-dark">
 									<i class="fas fa-route me-2"></i>Daftar Titik Patroli
 								</h6>
-								<button type="button" class="btn btn-success btn-sm" id="btn-add-patrol">
-									<i class="fas fa-plus me-1"></i>Tambah Titik
-								</button>
+								<div>
+									<?php if (!empty($existing_patrols) && count($existing_patrols) > 0): ?>
+									<button type="button" class="btn btn-primary btn-sm me-2" onclick="printAllBarcodes(<?=@$company->id_company?>)">
+										<i class="fas fa-print me-1"></i>Print All QR Codes
+									</button>
+									<?php endif; ?>
+									<button type="button" class="btn btn-success btn-sm" id="btn-add-patrol">
+										<i class="fas fa-plus me-1"></i>Tambah Titik
+									</button>
+								</div>
 							</div>
 							
 							<div id="patrol-container">

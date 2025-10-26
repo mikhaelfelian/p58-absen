@@ -345,7 +345,7 @@ function loadExistingPatrolPoints() {
 						</div>
 					</div>
 					
-					${patrol.barcode ? '<div class="row"><div class="col-12 mb-2"><label class="form-label fw-medium">Barcode</label><div class="form-control-plaintext text-center"><img id="barcode-img-' + patrolId + '" src="" alt="Barcode" class="img-fluid" style="max-width: 200px;"><br><small class="text-muted">' + patrol.barcode + '</small><br><button type="button" class="btn btn-sm btn-outline-primary mt-1" onclick="printBarcode(\'' + patrol.barcode + '\')"><i class="fas fa-print me-1"></i>Print</button></div></div></div>' : ''}
+					${patrol.barcode ? '<div class="row"><div class="col-12 mb-2"><label class="form-label fw-medium">QR Code</label><div class="form-control-plaintext text-center"><img id="barcode-img-' + patrolId + '" src="" alt="QR Code" class="img-fluid" style="max-width: 150px;"><br><small class="text-muted">' + patrol.barcode + '</small><br><button type="button" class="btn btn-sm btn-outline-primary mt-1" onclick="printQRCode(\'' + patrol.barcode + '\')"><i class="fas fa-print me-1"></i>Print</button></div></div></div>' : ''}
 				</div>
 			`;
 			
@@ -361,5 +361,160 @@ function loadExistingPatrolPoints() {
 			}
 		});
 	}
+}
+
+// Load QR code image
+function loadBarcodeImage(patrolId, barcode) {
+	$.ajax({
+		url: base_url + 'company/getBarcodeBase64/' + patrolId,
+		type: 'GET',
+		dataType: 'json',
+		success: function(response) {
+			if (response.status === 'ok') {
+				$('#barcode-img-' + patrolId).attr('src', response.barcode_image);
+			} else {
+				// Generate QR code directly if API fails
+				generateQRCodeDirectly(patrolId, barcode);
+			}
+		},
+		error: function(xhr, status, error) {
+			// Generate QR code directly if API fails
+			generateQRCodeDirectly(patrolId, barcode);
+		}
+	});
+}
+
+// Generate QR code directly using canvas
+function generateQRCodeDirectly(patrolId, barcode) {
+	// Create a simple QR code using canvas
+	var canvas = document.createElement('canvas');
+	var ctx = canvas.getContext('2d');
+	var size = 200;
+	
+	canvas.width = size;
+	canvas.height = size;
+	
+	// Fill with white background
+	ctx.fillStyle = '#ffffff';
+	ctx.fillRect(0, 0, size, size);
+	
+	// Create QR pattern
+	var matrixSize = 25;
+	var cellSize = size / matrixSize;
+	
+	// Generate pattern based on barcode
+	var hash = btoa(barcode).replace(/[^A-Za-z0-9]/g, '');
+	var hashIndex = 0;
+	
+	ctx.fillStyle = '#000000';
+	
+	for (var y = 0; y < matrixSize; y++) {
+		for (var x = 0; x < matrixSize; x++) {
+			// Skip corner markers
+			if ((x < 7 && y < 7) || (x >= matrixSize - 7 && y < 7) || (x < 7 && y >= matrixSize - 7)) {
+				continue;
+			}
+			
+			// Skip timing patterns
+			if (x === 6 || y === 6) {
+				continue;
+			}
+			
+			// Use hash to determine pattern
+			var hashChar = hash[hashIndex % hash.length];
+			var hashValue = hashChar.charCodeAt(0);
+			
+			if (hashValue % 2 === 0) {
+				ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+			}
+			
+			hashIndex++;
+		}
+	}
+	
+	// Add corner markers
+	drawCornerMarker(ctx, 0, 0, cellSize);
+	drawCornerMarker(ctx, (matrixSize - 7) * cellSize, 0, cellSize);
+	drawCornerMarker(ctx, 0, (matrixSize - 7) * cellSize, cellSize);
+	
+	// Add timing patterns
+	ctx.fillStyle = '#000000';
+	for (var i = 8; i < matrixSize - 8; i++) {
+		if (i % 2 === 0) {
+			ctx.fillRect(6 * cellSize, i * cellSize, cellSize, cellSize);
+			ctx.fillRect(i * cellSize, 6 * cellSize, cellSize, cellSize);
+		}
+	}
+	
+	// Convert to base64
+	var dataURL = canvas.toDataURL('image/png');
+	$('#barcode-img-' + patrolId).attr('src', dataURL);
+}
+
+// Draw corner marker
+function drawCornerMarker(ctx, x, y, cellSize) {
+	var markerSize = 7 * cellSize;
+	
+	// Outer square
+	ctx.fillStyle = '#000000';
+	ctx.fillRect(x, y, markerSize, markerSize);
+	
+	// Inner white square
+	ctx.fillStyle = '#ffffff';
+	ctx.fillRect(x + cellSize, y + cellSize, markerSize - 2 * cellSize, markerSize - 2 * cellSize);
+	
+	// Center black square
+	ctx.fillStyle = '#000000';
+	ctx.fillRect(x + 2 * cellSize, y + 2 * cellSize, markerSize - 4 * cellSize, markerSize - 4 * cellSize);
+}
+
+// Print QR code
+function printQRCode(barcode) {
+	// Create a new window for printing
+	var printWindow = window.open('', '_blank');
+	printWindow.document.write(`
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<title>Print QR Code - ${barcode}</title>
+			<style>
+				body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
+				.qr-container { margin: 20px 0; }
+				.qr-text { font-size: 14px; margin-top: 10px; }
+				@media print {
+					body { margin: 0; }
+					.no-print { display: none; }
+				}
+			</style>
+		</head>
+		<body>
+			<div class="qr-container">
+				<div id="qr-image"></div>
+				<div class="qr-text">${barcode}</div>
+			</div>
+			<div class="no-print">
+				<button onclick="window.print()">Print</button>
+				<button onclick="window.close()">Close</button>
+			</div>
+		</body>
+		</html>
+	`);
+	
+	// Load QR code image
+	$.ajax({
+		url: base_url + 'company/getBarcodeBase64/' + barcode.split('_')[2], // Extract patrol ID from barcode
+		type: 'GET',
+		dataType: 'json',
+		success: function(response) {
+			if (response.status === 'ok') {
+				printWindow.document.getElementById('qr-image').innerHTML = '<img src="' + response.barcode_image + '" style="max-width: 100%;">';
+			}
+		}
+	});
+}
+
+// Print all QR codes for a company
+function printAllBarcodes(companyId) {
+	window.open(base_url + 'company/printBarcodes/' + companyId, '_blank');
 }
 

@@ -27,76 +27,170 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 		</div>
 		<?php else: ?>
 		
-		<form id="form-activity">
-		<div class="mb-3">
-			<label class="form-label">Lokasi Company</label>
-			<!-- Auto-detect company based on GPS location -->
-			<div id="company-detecting" class="text-center py-3 bg-light rounded">
-				<div class="spinner-border text-primary" role="status">
-					<span class="visually-hidden">Loading...</span>
-				</div>
-				<p class="mt-2 mb-0"><small>Mendeteksi lokasi Anda...</small></p>
+		<!-- Step 1: QR Code Scanning -->
+		<div id="step-1" class="step-container">
+			<div class="text-center mb-4">
+				<div class="step-number">1</div>
+				<h5>Scan QR Code Patrol</h5>
+				<p class="text-muted">Silakan scan QR code di titik patroli untuk memulai activity</p>
 			</div>
-			<div id="company-detected" style="display:none;">
-				<div class="alert alert-success mb-0">
-					<i class="fas fa-map-marker-alt me-2"></i>
-					<strong id="detected-company-name"></strong>
-					<br>
-					<small id="detected-company-distance"></small>
+			
+			<div class="mb-3">
+				<label class="form-label">Lokasi Company</label>
+				<!-- Auto-detect company based on GPS location -->
+				<div id="company-detecting" class="text-center py-3 bg-light rounded">
+					<div class="spinner-border text-primary" role="status">
+						<span class="visually-hidden">Loading...</span>
+					</div>
+					<p class="mt-2 mb-0"><small>Mendeteksi lokasi Anda...</small></p>
+				</div>
+				<div id="company-detected" style="display:none;">
+					<div class="alert alert-success mb-0">
+						<i class="fas fa-map-marker-alt me-2"></i>
+						<strong id="detected-company-name"></strong>
+						<br>
+						<small id="detected-company-distance"></small>
+					</div>
+				</div>
+				<div id="company-not-found" style="display:none;">
+					<div class="alert alert-danger mb-0">
+						<i class="fas fa-exclamation-triangle me-2"></i>
+						<strong>Anda tidak berada di lokasi company manapun!</strong>
+						<br>
+						<small>Silahkan pergi ke lokasi company yang sudah di-assign.</small>
+					</div>
+				</div>
+				<input type="hidden" id="id_company" name="id_company" value="">
+			</div>
+			
+			<div class="text-center">
+				<button type="button" class="btn btn-primary btn-lg" id="btn-scan-qr">
+					<i class="fas fa-qrcode me-2"></i>Scan QR Code Patrol
+				</button>
+			</div>
+			
+			<!-- QR Scan Result -->
+			<div id="qr-scan-result" class="mt-3" style="display:none;">
+				<div class="alert alert-success">
+					<i class="fas fa-check-circle me-2"></i>
+					<strong>QR Code Berhasil Di-scan!</strong>
+					<div id="scanned-patrol-info" class="mt-2"></div>
+					<button type="button" class="btn btn-success btn-sm mt-2" id="btn-proceed-to-step2">
+						<i class="fas fa-arrow-right me-1"></i>Lanjut ke Step 2
+					</button>
 				</div>
 			</div>
-			<div id="company-not-found" style="display:none;">
-				<div class="alert alert-danger mb-0">
-					<i class="fas fa-exclamation-triangle me-2"></i>
-					<strong>Anda tidak berada di lokasi company manapun!</strong>
-					<br>
-					<small>Silahkan pergi ke lokasi company yang sudah di-assign.</small>
-				</div>
-			</div>
-			<input type="hidden" id="id_company" name="id_company" value="">
 		</div>
+		
+		<!-- Step 2: Activity Form -->
+		<div id="step-2" class="step-container" style="display:none;">
+			<div class="text-center mb-4">
+				<div class="step-number">2</div>
+				<h5>Isi Detail Activity</h5>
+				<p class="text-muted">Lengkapi informasi activity dan upload foto</p>
+			</div>
+			
+			<form id="form-activity">
+				<input type="hidden" id="id_patrol" name="id_patrol" value="">
+				<input type="hidden" id="scanned_barcode" name="scanned_barcode" value="">
 		
 		<!-- Store companies data for JavaScript -->
 		<script>
 		var assignedCompanies = <?=json_encode($companies ?? [])?>;
 		</script>
+		
+		<style>
+		.step-container {
+			animation: fadeIn 0.5s ease-in-out;
+		}
+		
+		.step-number {
+			width: 50px;
+			height: 50px;
+			border-radius: 50%;
+			background: #007bff;
+			color: white;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 20px;
+			font-weight: bold;
+			margin-bottom: 15px;
+		}
+		
+		@keyframes fadeIn {
+			from { opacity: 0; transform: translateY(20px); }
+			to { opacity: 1; transform: translateY(0); }
+		}
+		</style>
 			
-			<div class="mb-3">
-				<label class="form-label">Judul Activity <span class="text-danger">*</span></label>
-				<input type="text" class="form-control" id="judul_activity" name="judul_activity" placeholder="Contoh: Meeting dengan client" required>
-			</div>
-			
-			<div class="mb-3">
-				<label class="form-label">Deskripsi Activity <span class="text-danger">*</span></label>
-				<textarea class="form-control" id="deskripsi_activity" name="deskripsi_activity" rows="4" placeholder="Jelaskan detail pekerjaan yang dilakukan..." required></textarea>
-			</div>
-			
-			<div class="mb-3">
-				<label class="form-label">Foto Activity</label>
-				<div id="camera-container" style="display:none">
-					<div id="my_camera" class="mb-2"></div>
-					<button type="button" class="btn btn-primary btn-sm w-100" id="btn-capture">
-						<i class="fas fa-camera me-2"></i>Ambil Foto
+				<div class="mb-3">
+					<label class="form-label">Judul Activity <span class="text-danger">*</span></label>
+					<input type="text" class="form-control" id="judul_activity" name="judul_activity" placeholder="Contoh: Meeting dengan client" required>
+				</div>
+				
+				<div class="mb-3">
+					<label class="form-label">Deskripsi Activity <span class="text-danger">*</span></label>
+					<textarea class="form-control" id="deskripsi_activity" name="deskripsi_activity" rows="4" placeholder="Jelaskan detail pekerjaan yang dilakukan..." required></textarea>
+				</div>
+				
+				<div class="mb-3">
+					<label class="form-label">Foto Activity</label>
+					<div id="camera-container" style="display:none">
+						<div id="my_camera" class="mb-2"></div>
+						<button type="button" class="btn btn-primary btn-sm w-100" id="btn-capture">
+							<i class="fas fa-camera me-2"></i>Ambil Foto
+						</button>
+					</div>
+					<div id="preview-container" style="display:none">
+						<img id="preview-image" src="" class="img-fluid rounded mb-2" style="max-height:300px">
+						<button type="button" class="btn btn-warning btn-sm w-100" id="btn-retake">
+							<i class="fas fa-redo me-2"></i>Ambil Ulang
+						</button>
+					</div>
+					<button type="button" class="btn btn-info btn-sm w-100" id="btn-open-camera">
+						<i class="fas fa-camera me-2"></i>Buka Kamera
+					</button>
+					<input type="hidden" id="foto_activity" name="foto_activity">
+				</div>
+				
+				<div class="text-center">
+					<button type="button" class="btn btn-secondary me-2" id="btn-back-to-step1">
+						<i class="fas fa-arrow-left me-1"></i>Kembali
+					</button>
+					<button type="button" class="btn btn-success" id="btn-proceed-to-step3">
+						<i class="fas fa-arrow-right me-1"></i>Lanjut ke Step 3
 					</button>
 				</div>
-				<div id="preview-container" style="display:none">
-					<img id="preview-image" src="" class="img-fluid rounded mb-2" style="max-height:300px">
-					<button type="button" class="btn btn-warning btn-sm w-100" id="btn-retake">
-						<i class="fas fa-redo me-2"></i>Ambil Ulang
-					</button>
+			</form>
+		</div>
+		
+		<!-- Step 3: Review and Save -->
+		<div id="step-3" class="step-container" style="display:none;">
+			<div class="text-center mb-4">
+				<div class="step-number">3</div>
+				<h5>Review & Simpan</h5>
+				<p class="text-muted">Periksa kembali data activity sebelum disimpan</p>
+			</div>
+			
+			<div class="card">
+				<div class="card-body">
+					<h6 class="card-title">Detail Activity</h6>
+					<div id="review-content">
+						<!-- Review content will be populated here -->
+					</div>
 				</div>
-				<button type="button" class="btn btn-info btn-sm w-100" id="btn-open-camera">
-					<i class="fas fa-camera me-2"></i>Buka Kamera
+			</div>
+			
+			<div class="text-center mt-3">
+				<button type="button" class="btn btn-secondary me-2" id="btn-back-to-step2">
+					<i class="fas fa-arrow-left me-1"></i>Kembali
 				</button>
-				<input type="hidden" id="foto_activity" name="foto_activity">
+				<button type="button" class="btn btn-success" id="btn-save-activity">
+					<i class="fas fa-save me-2"></i>Simpan Activity
+				</button>
 			</div>
-			
-			<div id="alert-container"></div>
-			
-			<button type="submit" class="btn btn-success w-100 mt-3" id="btn-submit">
-				<i class="fas fa-save me-2"></i>Simpan Activity
-			</button>
-		</form>
+		</div>
 		
 		<?php endif; ?>
 	</div>
@@ -105,6 +199,43 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 		<a href="<?=base_url()?>mobile-activity/riwayat" class="btn btn-outline-light">
 			<i class="fas fa-history me-2"></i>Lihat Riwayat Activity
 		</a>
+	</div>
+</div>
+
+<!-- QR Scanner Modal -->
+<div class="modal fade" id="qrScannerModal" tabindex="-1">
+	<div class="modal-dialog modal-dialog-centered">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title">Scan QR Code Patrol</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+			</div>
+			<div class="modal-body text-center">
+				<div id="qr-reader" style="width: 100%; max-width: 400px; margin: 0 auto;"></div>
+				<div id="qr-scanning-status" class="mt-3">
+					<div class="alert alert-info">
+						<i class="fas fa-search me-2"></i>
+						<strong>Mencari QR Code...</strong>
+						<br>
+						<small>Arahkan kamera ke QR code patrol</small>
+					</div>
+				</div>
+				<div id="qr-result" class="mt-3" style="display:none;">
+					<div class="alert alert-success">
+						<i class="fas fa-check-circle me-2"></i>
+						<strong>QR Code Terdeteksi:</strong>
+						<div id="qr-code-text" class="mt-2"></div>
+					</div>
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-info btn-sm" id="btn-test-qr">
+					<i class="fas fa-qrcode me-1"></i>Test QR
+				</button>
+				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+				<button type="button" class="btn btn-primary" id="btn-validate-qr" style="display:none;">Validasi</button>
+			</div>
+		</div>
 	</div>
 </div>
 
@@ -264,72 +395,10 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 		Webcam.attach('#my_camera');
 	});
 	
-	// Submit form
-	jQuery('#form-activity').on('submit', function(e) {
-		e.preventDefault();
-		
-		var id_company = jQuery('#id_company').val();
-		var judul_activity = jQuery('#judul_activity').val();
-		var deskripsi_activity = jQuery('#deskripsi_activity').val();
-		var foto = jQuery('#foto_activity').val();
-		
-		if (!id_company) {
-			Swal.fire({
-				icon: 'error',
-				title: 'Lokasi Invalid!',
-				text: 'Anda tidak berada di lokasi company yang di-assign.',
-				confirmButtonText: 'OK'
-			});
-			return false;
-		}
-		
-		if (!judul_activity) {
-			showAlert('error', 'Judul activity harus diisi');
-			return false;
-		}
-		
-		if (!deskripsi_activity) {
-			showAlert('error', 'Deskripsi activity harus diisi');
-			return false;
-		}
-		
-		var data = {
-			id_company: id_company,
-			judul_activity: judul_activity,
-			deskripsi_activity: deskripsi_activity,
-			foto: foto,
-			location: currentLocation
-		};
-		
-		var data_encoded = btoa(JSON.stringify(data));
-		
-		jQuery('#btn-submit').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...');
-		
-		jQuery.ajax({
-			url: base_url + 'mobile-activity/ajaxSaveActivity',
-			type: 'POST',
-			data: {data: data_encoded},
-			dataType: 'json',
-			success: function(response) {
-				if (response.status == 'ok') {
-					Swal.fire({
-						icon: 'success',
-						title: 'Berhasil!',
-						text: response.message,
-						confirmButtonText: 'OK'
-					}).then(() => {
-						location.reload();
-					});
-				} else {
-					showAlert('error', response.message);
-					jQuery('#btn-submit').prop('disabled', false).html('<i class="fas fa-save me-2"></i>Simpan Activity');
-				}
-			},
-			error: function() {
-				showAlert('error', 'Terjadi kesalahan saat menyimpan data');
-				jQuery('#btn-submit').prop('disabled', false).html('<i class="fas fa-save me-2"></i>Simpan Activity');
-			}
-		});
+	// QR Scanner button click handler
+	jQuery('#btn-scan-qr').on('click', function() {
+		jQuery('#qrScannerModal').modal('show');
+		// QR scanner will be initialized by main-mobile.js modal events
 	});
 	
 	function showAlert(type, message) {

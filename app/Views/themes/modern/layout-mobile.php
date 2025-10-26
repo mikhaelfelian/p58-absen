@@ -134,9 +134,9 @@ if (@$styles) {
 					<p class="mb-0"><?=$data_setelah_nama_user?></p>
 				</div>
 			</div>
-		<nav class="mt-3">
-			<ul class="nav nav-pills flex-column">
-				<?php
+			<nav class="mt-3">
+				<ul class="nav nav-pills flex-column">
+					<?php
 				// Helper function for mobile menu rendering (define first)
 				if (!function_exists('build_menu_mobile')) {
 					function build_menu_mobile($current_module, $menu, $level = 0) {
@@ -204,8 +204,8 @@ if (@$styles) {
 					}
 				}
 				?>
-			</ul>
-		</nav>
+				</ul>
+			</nav>
 		</div>
 	</div>
 
@@ -227,6 +227,7 @@ if (@$styles) {
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/jquery.select2/js/select2.full.min.js'?>"></script>
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/bootbox/bootbox.min.js'?>"></script>
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/sweetalert2/sweetalert2.min.js'?>"></script>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script type="text/javascript" src="<?=$config->baseURL . 'public/themes/modern/builtin/js/functions.js?r='.time()?>"></script>
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/overlayscrollbars/jquery.overlayScrollbars.min.js'?>"></script>
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/pace/pace.min.js?r='.time()?>"></script>

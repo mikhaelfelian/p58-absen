@@ -9,6 +9,8 @@
 namespace App\Controllers;
 use App\Models\ActivityModel;
 use App\Models\UserCompanyModel;
+use App\Models\CompanyPatrolModel;
+use App\Models\ActivityPatrolModel;
 
 class Mobile_activity extends BaseController
 {
@@ -46,10 +48,35 @@ class Mobile_activity extends BaseController
 	}
 	
 	public function ajaxSaveActivity() {
-		$data = base64_decode($_POST['data']);
-		$data_array = json_decode($data, true);
-		
-		$error = [];
+		try {
+			// Log raw POST data for debugging
+			log_message('debug', 'Raw POST data: ' . json_encode($_POST));
+			
+			// Check if data exists in POST
+			if (!isset($_POST['data'])) {
+				echo json_encode([
+					'status' => 'error',
+					'message' => 'Data tidak ditemukan dalam request. POST keys: ' . implode(', ', array_keys($_POST))
+				]);
+				return;
+			}
+			
+			$data = base64_decode($_POST['data']);
+			$data_array = json_decode($data, true);
+			
+			// Validate JSON decode
+			if (json_last_error() !== JSON_ERROR_NONE) {
+				echo json_encode([
+					'status' => 'error',
+					'message' => 'Data tidak valid: ' . json_last_error_msg()
+				]);
+				return;
+			}
+			
+			// Log for debugging
+			log_message('debug', 'Activity save data: ' . json_encode($data_array));
+			
+			$error = [];
 		
 		// Validate company assignment
 		$userCompanyModel = new UserCompanyModel;
@@ -107,7 +134,72 @@ class Mobile_activity extends BaseController
 		];
 		
 		$result = $this->model->saveData($activity_data);
+		
+		// Save patrol scan if patrol is selected (skip for test data)
+		if ($result['status'] == 'ok' && !empty($data_array['id_patrol']) && $data_array['id_patrol'] !== 'TEST_PATROL_ID') {
+			$activityPatrolModel = new ActivityPatrolModel;
+			$activityPatrolModel->savePatrolScan(
+				$result['id_activity'],
+				$data_array['id_patrol'],
+				$data_array['barcode_scanned'] ?? '',
+				$data_array['location']['coords']['latitude'] ?? null,
+				$data_array['location']['coords']['longitude'] ?? null
+			);
+		}
+		
 		echo json_encode($result);
+		
+		} catch (\Exception $e) {
+			log_message('error', 'Activity save error: ' . $e->getMessage());
+			echo json_encode([
+				'status' => 'error',
+				'message' => 'Terjadi kesalahan saat menyimpan data: ' . $e->getMessage()
+			]);
+		}
+	}
+	
+	/**
+	 * Get patrol points for a company
+	 */
+	public function getPatrolPoints($company_id) {
+		$patrolModel = new CompanyPatrolModel;
+		$patrols = $patrolModel->getPatrolByCompany($company_id);
+		
+		echo json_encode([
+			'status' => 'ok',
+			'data' => $patrols
+		]);
+	}
+	
+	/**
+	 * Validate QR code
+	 */
+	public function validateQRCode() {
+		$barcode = $this->request->getPost('barcode');
+		$id_company = $this->request->getPost('id_company');
+		
+		if (empty($barcode)) {
+			echo json_encode([
+				'status' => 'error',
+				'message' => 'Barcode tidak boleh kosong'
+			]);
+			return;
+		}
+		
+		$patrolModel = new CompanyPatrolModel;
+		$patrol = $patrolModel->validateBarcode($barcode, $id_company);
+		
+		if ($patrol) {
+			echo json_encode([
+				'status' => 'ok',
+				'data' => $patrol
+			]);
+		} else {
+			echo json_encode([
+				'status' => 'error',
+				'message' => 'QR Code tidak valid atau tidak ditemukan untuk company ini'
+			]);
+		}
 	}
 }
 

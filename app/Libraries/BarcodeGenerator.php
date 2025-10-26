@@ -31,8 +31,8 @@ class BarcodeGenerator
             mkdir($dir, 0755, true);
         }
         
-        // Generate barcode using TCPDF
-        $barcode = $this->tcpdf->serializeTCPDFtagParameters(array($barcode_text, 'C128', '', '', 80, 30, 0.4, array('position'=>'S', 'border'=>true, 'padding'=>4, 'fgcolor'=>array(0,0,0), 'bgcolor'=>array(255,255,255), 'text'=>true, 'font'=>'helvetica', 'fontsize'=>8, 'stretchtext'=>4), 'N'));
+        // Generate QR code using TCPDF
+        $barcode = $this->tcpdf->serializeTCPDFtagParameters(array($barcode_text, 'QRCODE,L', '', '', 100, 100, array('border'=>true, 'padding'=>4, 'fgcolor'=>array(0,0,0), 'bgcolor'=>array(255,255,255)), 'N'));
         
         // Create a simple barcode image
         $this->tcpdf->SetCreator('Patrol System');
@@ -56,10 +56,10 @@ class BarcodeGenerator
         $this->tcpdf->SetFont('helvetica', '', 12);
         
         // Add barcode
-        $this->tcpdf->write1DBarcode($barcode_text, 'C128', 50, 50, 100, 30, 0.4, array('position'=>'S', 'border'=>true, 'padding'=>4, 'fgcolor'=>array(0,0,0), 'bgcolor'=>array(255,255,255), 'text'=>true, 'font'=>'helvetica', 'fontsize'=>8, 'stretchtext'=>4), 'N');
+        $this->tcpdf->write2DBarcode($barcode_text, 'QRCODE,L', 50, 50, 100, 100, array('border'=>true, 'padding'=>4, 'fgcolor'=>array(0,0,0), 'bgcolor'=>array(255,255,255)), 'N');
         
-        // Add text below barcode
-        $this->tcpdf->SetXY(50, 85);
+        // Add text below QR code
+        $this->tcpdf->SetXY(50, 155);
         $this->tcpdf->Cell(100, 10, $barcode_text, 0, 0, 'C');
         
         // Output as PNG
@@ -94,10 +94,10 @@ class BarcodeGenerator
         $this->tcpdf->SetFont('helvetica', '', 12);
         
         // Add barcode
-        $this->tcpdf->write1DBarcode($barcode_text, 'C128', 50, 50, 100, 30, 0.4, array('position'=>'S', 'border'=>true, 'padding'=>4, 'fgcolor'=>array(0,0,0), 'bgcolor'=>array(255,255,255), 'text'=>true, 'font'=>'helvetica', 'fontsize'=>8, 'stretchtext'=>4), 'N');
+        $this->tcpdf->write2DBarcode($barcode_text, 'QRCODE,L', 50, 50, 100, 100, array('border'=>true, 'padding'=>4, 'fgcolor'=>array(0,0,0), 'bgcolor'=>array(255,255,255)), 'N');
         
-        // Add text below barcode
-        $this->tcpdf->SetXY(50, 85);
+        // Add text below QR code
+        $this->tcpdf->SetXY(50, 155);
         $this->tcpdf->Cell(100, 10, $barcode_text, 0, 0, 'C');
         
         // Output as base64
@@ -131,14 +131,14 @@ class BarcodeGenerator
         $this->tcpdf->SetFont('helvetica', 'B', 16);
         
         // Title
-        $this->tcpdf->Cell(0, 10, 'Patrol Points Barcodes', 0, 1, 'C');
+        $this->tcpdf->Cell(0, 10, 'Patrol Points QR Codes', 0, 1, 'C');
         if ($company_name) {
             $this->tcpdf->SetFont('helvetica', '', 12);
             $this->tcpdf->Cell(0, 5, $company_name, 0, 1, 'C');
         }
         $this->tcpdf->Ln(10);
         
-        // Generate barcodes
+        // Generate QR codes
         $x = 20;
         $y = 50;
         $count = 0;
@@ -154,23 +154,23 @@ class BarcodeGenerator
             $this->tcpdf->SetXY($x, $y);
             $this->tcpdf->Cell(80, 5, $patrol['nama_patrol'], 0, 0, 'L');
             
-            // Barcode
-            $this->tcpdf->write1DBarcode($patrol['barcode'], 'C128', $x, $y + 8, 80, 25, 0.4, array('position'=>'S', 'border'=>true, 'padding'=>2, 'fgcolor'=>array(0,0,0), 'bgcolor'=>array(255,255,255), 'text'=>true, 'font'=>'helvetica', 'fontsize'=>6, 'stretchtext'=>3), 'N');
+            // QR code
+            $this->tcpdf->write2DBarcode($patrol['barcode'], 'QRCODE,L', $x, $y + 8, 80, 80, array('border'=>true, 'padding'=>2, 'fgcolor'=>array(0,0,0), 'bgcolor'=>array(255,255,255)), 'N');
             
-            // Barcode text
+            // QR code text
             $this->tcpdf->SetFont('helvetica', '', 8);
-            $this->tcpdf->SetXY($x, $y + 35);
+            $this->tcpdf->SetXY($x, $y + 90);
             $this->tcpdf->Cell(80, 4, $patrol['barcode'], 0, 0, 'C');
             
             if ($count % 2 == 0) {
                 $x = 110; // Right column
             } else {
                 $x = 20; // Left column
-                $y += 50; // Next row
+                $y += 120; // Next row (more space for QR codes)
             }
             $count++;
         }
         
-        return $this->tcpdf->Output('patrol_barcodes.pdf', 'D'); // Download
+        return $this->tcpdf->Output('patrol_qrcodes.pdf', 'D'); // Download
     }
 }

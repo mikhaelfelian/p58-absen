@@ -9,7 +9,7 @@
 namespace App\Controllers;
 use App\Models\CompanyModel;
 use App\Models\CompanyPatrolModel;
-use App\Libraries\BarcodeGenerator;
+use App\Libraries\SimpleQRCode;
 
 class Company extends BaseController
 {
@@ -43,7 +43,14 @@ class Company extends BaseController
 				$this->data['message'] = $result;
 				
 				if ($result['status'] == 'ok') {
-					return redirect()->to($this->moduleURL);
+					// Stay on the form and show success message
+					$this->data['message'] = ['status' => 'success', 'message' => 'Data perusahaan berhasil disimpan'];
+					// Reload the form with the saved data
+					$company_id = $this->model->getInsertID();
+					$this->data['company'] = $this->model->getCompanyById($company_id);
+					$this->data['mode'] = 'edit';
+					$this->data['company_setting'] = $this->model->getCompanySetting($company_id);
+					$this->data['existing_patrols'] = $this->patrolModel->getPatrolByCompany($company_id);
 				}
 			}
 		}
@@ -83,7 +90,13 @@ class Company extends BaseController
 				$this->data['message'] = $result;
 				
 				if ($result['status'] == 'ok') {
-					return redirect()->to($this->moduleURL);
+					// Stay on the form and show success message
+					$this->data['message'] = ['status' => 'success', 'message' => 'Data perusahaan berhasil diperbarui'];
+					// Reload the form with the updated data
+					$company_id = $this->request->getPost('id_company');
+					$this->data['company'] = $this->model->getCompanyById($company_id);
+					$this->data['company_setting'] = $this->model->getCompanySetting($company_id);
+					$this->data['existing_patrols'] = $this->patrolModel->getPatrolByCompany($company_id);
 				}
 			}
 		}
@@ -183,7 +196,7 @@ class Company extends BaseController
 	}
 	
 	/**
-	 * Generate barcode image for a patrol point
+	 * Generate QR code image for a patrol point
 	 */
 	public function generateBarcode($patrol_id)
 	{
@@ -192,8 +205,8 @@ class Company extends BaseController
 			show_404();
 		}
 		
-		$barcodeGenerator = new BarcodeGenerator();
-		$filepath = $barcodeGenerator->generateBarcodeImage($patrol['barcode']);
+		$qrGenerator = new SimpleQRCode();
+		$filepath = $qrGenerator->generateQRCodeImage($patrol['barcode']);
 		
 		// Return the image
 		$image = file_get_contents($filepath);
@@ -203,7 +216,7 @@ class Company extends BaseController
 	}
 	
 	/**
-	 * Print all barcodes for a company as PDF
+	 * Print all QR codes for a company as PDF
 	 */
 	public function printBarcodes($company_id)
 	{
@@ -219,12 +232,12 @@ class Company extends BaseController
 			return;
 		}
 		
-		$barcodeGenerator = new BarcodeGenerator();
-		$barcodeGenerator->generatePrintablePDF($patrol_points, $company->nama_company);
+		$qrGenerator = new SimpleQRCode();
+		$qrGenerator->generatePrintablePDF($patrol_points, $company->nama_company);
 	}
 	
 	/**
-	 * Get barcode as base64 for display
+	 * Get QR code as base64 for display
 	 */
 	public function getBarcodeBase64($patrol_id)
 	{
@@ -234,8 +247,8 @@ class Company extends BaseController
 			return;
 		}
 		
-		$barcodeGenerator = new BarcodeGenerator();
-		$base64 = $barcodeGenerator->generateBarcodeBase64($patrol['barcode']);
+		$qrGenerator = new SimpleQRCode();
+		$base64 = $qrGenerator->generateQRCodeBase64($patrol['barcode']);
 		
 		echo json_encode(['status' => 'ok', 'barcode_image' => $base64]);
 	}

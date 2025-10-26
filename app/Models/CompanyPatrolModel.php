@@ -70,4 +70,31 @@ class CompanyPatrolModel extends Model
         $barcode = sprintf('PATROL_%03d_%03d_%s', $id_company, $sequence, $timestamp);
         return $barcode;
     }
+    
+    /**
+     * Validate barcode and get patrol info
+     */
+    public function validateBarcode($barcode, $id_company = null)
+    {
+        $db = \Config\Database::connect();
+        
+        $sql = "
+            SELECT cp.*, c.nama_company 
+            FROM company_patrol cp 
+            JOIN company c ON cp.id_company = c.id_company 
+            WHERE cp.barcode = ?
+        ";
+        
+        $params = [$barcode];
+        
+        // Add company filter if provided
+        if ($id_company) {
+            $sql .= " AND cp.id_company = ?";
+            $params[] = $id_company;
+        }
+        
+        $query = $db->query($sql, $params);
+        
+        return $query->getRow();
+    }
 }

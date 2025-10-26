@@ -695,7 +695,7 @@ $(document).ready(function() {
 					}
 					// Update waktu presensi if btn_clicked is set
 					if (btn_clicked && btn_clicked !== '') {
-						$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
+					$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
 					}
 					toast_mobile('<i class="bi bi-check-circle me-2"></i>Data berhasil disimpan');
 					$('.nav-footer-home').click();
@@ -870,4 +870,421 @@ $(document).ready(function() {
 			})
 		}
 	})
+	
+	// Patrol functionality
+	initPatrolFunctionality();
 })
+
+// Patrol functionality
+function initPatrolFunctionality() {
+	let qrScanner = null;
+	let currentCompanyId = null;
+	let patrolOptions = [];
+	let currentStep = 1;
+	let scannedPatrolData = null;
+	
+	// Load patrol points when company is detected
+	window.addEventListener('companyDetected', function(event) {
+		currentCompanyId = event.detail.companyId;
+		loadPatrolPoints(currentCompanyId);
+	});
+	
+	// Step navigation
+	$('#btn-proceed-to-step2').click(function() {
+		showStep(2);
+	});
+	
+	$('#btn-back-to-step1').click(function() {
+		showStep(1);
+	});
+	
+	$('#btn-proceed-to-step3').click(function() {
+		validateStep2();
+	});
+	
+	$('#btn-back-to-step2').click(function() {
+		showStep(2);
+	});
+	
+	// Show specific step
+	function showStep(step) {
+		$('.step-container').hide();
+		$('#step-' + step).show();
+		currentStep = step;
+		
+		if (step === 3) {
+			populateReviewContent();
+		}
+	}
+	
+	// Validate step 2 before proceeding
+	function validateStep2() {
+		const judul = $('#judul_activity').val();
+		const deskripsi = $('#deskripsi_activity').val();
+		
+		if (!judul.trim()) {
+			Swal.fire('Error', 'Judul activity harus diisi', 'error');
+			return;
+		}
+		
+		if (!deskripsi.trim()) {
+			Swal.fire('Error', 'Deskripsi activity harus diisi', 'error');
+			return;
+		}
+		
+		showStep(3);
+	}
+	
+	// Populate review content
+	function populateReviewContent() {
+		const judul = $('#judul_activity').val();
+		const deskripsi = $('#deskripsi_activity').val();
+		const foto = $('#foto_activity').val();
+		
+		let reviewHtml = `
+			<div class="row">
+				<div class="col-6"><strong>Titik Patroli:</strong></div>
+				<div class="col-6">${scannedPatrolData ? scannedPatrolData.nama_patrol : 'N/A'}</div>
+			</div>
+			<div class="row">
+				<div class="col-6"><strong>Company:</strong></div>
+				<div class="col-6">${scannedPatrolData ? scannedPatrolData.nama_company : 'N/A'}</div>
+			</div>
+			<div class="row">
+				<div class="col-6"><strong>Judul:</strong></div>
+				<div class="col-6">${judul}</div>
+			</div>
+			<div class="row">
+				<div class="col-6"><strong>Deskripsi:</strong></div>
+				<div class="col-6">${deskripsi}</div>
+			</div>
+			<div class="row">
+				<div class="col-6"><strong>Foto:</strong></div>
+				<div class="col-6">${foto ? '✓ Sudah diambil' : '✗ Belum diambil'}</div>
+			</div>
+		`;
+		
+		$('#review-content').html(reviewHtml);
+	}
+	
+	// Load patrol points for a company
+	function loadPatrolPoints(companyId) {
+		$.ajax({
+			url: base_url + 'activity/getPatrolPoints/' + companyId,
+			type: 'GET',
+			dataType: 'json',
+			success: function(response) {
+				if (response.status === 'ok') {
+					patrolOptions = response.data;
+					updatePatrolDropdown();
+				}
+			},
+			error: function() {
+				console.log('Error loading patrol points');
+			}
+		});
+	}
+	
+	// Update patrol dropdown
+	function updatePatrolDropdown() {
+		const select = $('#id_patrol');
+		select.empty().append('<option value="">Pilih Titik Patroli</option>');
+		
+		patrolOptions.forEach(function(patrol) {
+			select.append(`<option value="${patrol.id_patrol}" data-barcode="${patrol.barcode}">${patrol.nama_patrol}</option>`);
+		});
+	}
+	
+	// QR Scanner functionality
+	$('#btn-scan-qr').click(function() {
+		$('#qrScannerModal').modal('show');
+		// Don't start scanner here, let modal event handle it
+	});
+	
+	// Handle modal opened event
+	$(document).on('qrScannerModalOpened', function() {
+		startQRScanner();
+	});
+	
+	// Handle modal shown event
+	$('#qrScannerModal').on('shown.bs.modal', function() {
+		startQRScanner();
+	});
+	
+	
+	// Start QR scanner
+	function startQRScanner() {
+		// Check if Html5Qrcode is available
+		if (typeof Html5Qrcode === 'undefined') {
+			console.error('Html5Qrcode library not loaded');
+			Swal.fire('Error', 'QR Scanner library tidak tersedia', 'error');
+			return;
+		}
+		
+		// Check if scanner is already running
+		if (qrScanner && qrScanner.isScanning && qrScanner.isScanning()) {
+			console.log('QR Scanner already running');
+			return;
+		}
+		
+		// Clear existing scanner
+		if (qrScanner) {
+			qrScanner.clear();
+		}
+		
+		const config = {
+			fps: 30,
+			qrbox: { width: 250, height: 250 },
+			aspectRatio: 1.0,
+			rememberLastUsedCamera: true,
+			supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+			showTorchButtonIfSupported: true,
+			showZoomSliderIfSupported: true,
+			defaultZoomValueIfSupported: 2,
+			useBarCodeDetectorIfSupported: true
+		};
+		
+		qrScanner = new Html5Qrcode("qr-reader");
+		
+		// Try environment camera first, then user camera as fallback
+		const cameraConfigs = [
+			{ facingMode: "environment" },
+			{ facingMode: "user" },
+			"environment",
+			"user"
+		];
+		
+		let currentConfigIndex = 0;
+		
+		function tryStartScanner() {
+			if (currentConfigIndex >= cameraConfigs.length) {
+				Swal.fire('Error', 'Tidak dapat mengakses kamera. Pastikan izin kamera diberikan.', 'error');
+				return;
+			}
+			
+			const cameraConfig = cameraConfigs[currentConfigIndex];
+			console.log('Trying camera config:', cameraConfig);
+			
+			qrScanner.start(
+				cameraConfig,
+				config,
+				onScanSuccess,
+				onScanFailure
+			).then(() => {
+				console.log('QR Scanner started successfully with config:', cameraConfig);
+			}).catch(err => {
+				console.error("Failed with config:", cameraConfig, err);
+				currentConfigIndex++;
+				tryStartScanner();
+			});
+		}
+		
+		tryStartScanner();
+	}
+	
+	// QR scan success
+	function onScanSuccess(decodedText, decodedResult) {
+		console.log(`QR Code detected: ${decodedText}`);
+		
+		// Stop scanner
+		qrScanner.stop().then(() => {
+			qrScanner.clear();
+		}).catch(err => {
+			console.log("Error stopping scanner after success", err);
+		});
+		
+		// For testing: Auto-proceed to step 2 without validation
+		// Store the scanned barcode
+		$('#scanned_barcode').val(decodedText);
+		$('#id_patrol').val('TEST_PATROL_ID'); // Set a test patrol ID
+		
+		// Store scanned patrol data for display
+		scannedPatrolData = {
+			id_patrol: 'TEST_PATROL_ID',
+			nama_patrol: 'Test Patrol Point',
+			nama_company: 'Test Company',
+			barcode: decodedText
+		};
+		
+		// Show success feedback and auto-proceed
+		Swal.fire({
+			icon: 'success',
+			title: 'QR Code Terdeteksi!',
+			text: 'Kode: ' + decodedText + ' - Lanjut ke Step 2',
+			timer: 2000,
+			showConfirmButton: false
+		}).then(() => {
+			// Close modal and proceed to step 2
+			$('#qrScannerModal').modal('hide');
+			showStep(2);
+		});
+	}
+	
+	// QR scan failure
+	function onScanFailure(error) {
+		// Only log if it's not a common "not found" error
+		if (error && 
+			!error.includes("No QR code found") && 
+			!error.includes("No MultiFormat Readers were able to detect the code") &&
+			!error.includes("QR code parse error")) {
+			console.log("QR Scan error:", error);
+		}
+	}
+	
+	// Validate QR code
+	$('#btn-validate-qr').click(function() {
+		const barcode = $(this).data('barcode');
+		validateQRCode(barcode);
+	});
+	
+	// Test QR code button
+	$('#btn-test-qr').click(function() {
+		// Simulate a QR code detection for testing
+		const testBarcode = 'TEST_PATROL_' + Date.now();
+		onScanSuccess(testBarcode, {});
+	});
+	
+	// Validate QR code with server
+	function validateQRCode(barcode) {
+		$.ajax({
+			url: base_url + 'mobile-activity/validateQRCode',
+			type: 'POST',
+			data: { 
+				barcode: barcode,
+				id_company: currentCompanyId
+			},
+			dataType: 'json',
+			success: function(response) {
+				if (response.status === 'ok') {
+					// Store scanned patrol data
+					scannedPatrolData = response.data;
+					
+					// Update form fields
+					$('#id_patrol').val(scannedPatrolData.id_patrol);
+					$('#scanned_barcode').val(barcode);
+					
+					// Show scan result
+					$('#scanned-patrol-info').html(`
+						<strong>${scannedPatrolData.nama_patrol}</strong><br>
+						<small>${scannedPatrolData.nama_company}</small>
+					`);
+					$('#qr-scan-result').show();
+					
+					$('#qrScannerModal').modal('hide');
+					Swal.fire('Berhasil!', `QR Code valid: ${scannedPatrolData.nama_patrol}`, 'success');
+				} else {
+					Swal.fire('Error', response.message || 'QR Code tidak valid', 'error');
+				}
+			},
+			error: function() {
+				Swal.fire('Error', 'Gagal memvalidasi QR Code', 'error');
+			}
+		});
+	}
+	
+	// Close modal and stop scanner
+	$('#qrScannerModal').on('hidden.bs.modal', function() {
+		if (qrScanner) {
+			qrScanner.stop().then(() => {
+				qrScanner.clear();
+				qrScanner = null; // Reset scanner instance
+			}).catch(err => {
+				console.log("Error stopping scanner", err);
+				qrScanner = null; // Reset even if stop fails
+			});
+		}
+		$('#qr-scanning-status').show();
+		$('#qr-result').hide();
+		$('#btn-validate-qr').hide();
+	});
+	
+	// Save activity from step 3
+	$('#btn-save-activity').click(function() {
+		saveActivity();
+	});
+	
+	// Save activity function
+	function saveActivity() {
+		const id_company = $('#id_company').val();
+		const id_patrol = $('#id_patrol').val();
+		const scanned_barcode = $('#scanned_barcode').val();
+		const judul_activity = $('#judul_activity').val();
+		const deskripsi_activity = $('#deskripsi_activity').val();
+		const foto = $('#foto_activity').val();
+		
+		if (!id_company) {
+			Swal.fire('Error', 'Lokasi company tidak valid', 'error');
+			return;
+		}
+		
+		if (!id_patrol) {
+			Swal.fire('Error', 'Titik patroli harus dipilih', 'error');
+			return;
+		}
+		
+		if (!judul_activity.trim()) {
+			Swal.fire('Error', 'Judul activity harus diisi', 'error');
+			return;
+		}
+		
+		if (!deskripsi_activity.trim()) {
+			Swal.fire('Error', 'Deskripsi activity harus diisi', 'error');
+			return;
+		}
+		
+		const data = {
+			id_company: id_company,
+			id_patrol: id_patrol,
+			barcode_scanned: scanned_barcode,
+			judul_activity: judul_activity,
+			deskripsi_activity: deskripsi_activity,
+			foto: foto,
+			location: currentLocation
+		};
+		
+		const data_encoded = btoa(JSON.stringify(data));
+		
+		$('#btn-save-activity').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...');
+		
+		$.ajax({
+			url: base_url + 'mobile-activity/ajaxSaveActivity',
+			type: 'POST',
+			data: { data: data_encoded },
+			dataType: 'json',
+			success: function(response) {
+				$('#btn-save-activity').prop('disabled', false).html('<i class="fas fa-save me-2"></i>Simpan Activity');
+				
+				if (response.status === 'ok') {
+					Swal.fire({
+						icon: 'success',
+						title: 'Berhasil!',
+						text: 'Activity berhasil disimpan',
+						confirmButtonText: 'OK'
+					}).then(() => {
+						// Reset form and go back to step 1
+						resetForm();
+						showStep(1);
+					});
+				} else {
+					Swal.fire('Error', response.message || 'Gagal menyimpan activity', 'error');
+				}
+			},
+			error: function() {
+				$('#btn-save-activity').prop('disabled', false).html('<i class="fas fa-save me-2"></i>Simpan Activity');
+				Swal.fire('Error', 'Gagal menyimpan activity', 'error');
+			}
+		});
+	}
+	
+	// Reset form
+	function resetForm() {
+		$('#form-activity')[0].reset();
+		$('#qr-scan-result').hide();
+		$('#id_patrol').val('');
+		$('#scanned_barcode').val('');
+		scannedPatrolData = null;
+		$('#preview-container').hide();
+		$('#camera-container').hide();
+		$('#foto_activity').val('');
+	}
+}
