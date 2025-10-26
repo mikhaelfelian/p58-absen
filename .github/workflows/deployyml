@@ -1,0 +1,52 @@
+name: Deploy and Notify
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install lftp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lftp
+
+      - name: Deploy Code via FTP
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          echo "🚀 Starting FTP deployment..."
+          lftp -c "
+            set ftp:ssl-allow no;
+            set ftp:passive-mode on;
+            set net:max-retries 2;
+            set net:timeout 15;
+            open -u \"$FTP_USER\",\"$FTP_PASSWORD\" ftp://$FTP_HOST;
+            mirror -R --delete --exclude .git/ --exclude .github/ ./ $DEPLOY_PATH;
+            bye
+          "
+          echo "✅ FTP deploy finished successfully."
+
+      - name: Notify Deployment Completion to GitHub Issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKENS }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          echo "💬 Creating deployment comment..."
+          curl -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"body\": \"**✅ Berhasil Deploy via FTP ke Server Dapanel**:\\n- **Branch**: main\\n- **Last Commit**: $SHA\\n- **Server Path**: \`$DEPLOY_PATH\`\\n\\nSilakan cek hasil di server.\"}" \
+            https://api.github.com/repos/$REPO/issues/1/comments
