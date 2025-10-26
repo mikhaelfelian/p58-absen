@@ -1,9 +1,10 @@
 # 🧭 Aplikasi Absensi & Patrol Mode (Web & Mobile)
 
+> Dimodifikasi dari **Jagowebdev** dan ditambahkan beberapa fitur baru.  
+> Beberapa skrip native telah diperbaiki agar mengikuti **aturan baku CodeIgniter 4**.
+
 Aplikasi absensi berbasis **web dan mobile** yang dikembangkan menggunakan **CodeIgniter 4.5.3**, dengan fitur utama **QR Attendance** dan **Patrol Mode**.  
 Sistem ini dirancang untuk mendukung operasional perusahaan dalam melakukan absensi, pencatatan aktivitas, serta patroli keamanan berbasis lokasi dan QR Code.
-
-_Modifikasi berdasarkan Jagowebdev Absensi Online dengan penambahan beberapa role dan fitur baru._
 
 ---
 
@@ -30,8 +31,8 @@ Aplikasi ini sudah mengimplementasikan **RBAC (Role-Based Access Control)** untu
 Artinya, setiap pengguna memiliki **role tertentu** (misalnya: Admin, Supervisor, Security, User) yang menentukan modul, menu, dan fitur apa saja yang dapat diakses.
 
 Contoh implementasi:
-- **Admin:** dapat mengelola semua data dan user.
-- **Supervisor:** dapat melihat laporan dan aktivitas bawahannya.
+- **Admin:** dapat mengelola semua data dan user.  
+- **Supervisor:** dapat melihat laporan dan aktivitas bawahannya.  
 - **Security/User:** hanya dapat melakukan absensi dan patroli.
 
 Keamanan dan modularitas sistem menjadi lebih terstruktur karena setiap izin (permission) diatur melalui tabel `role`, `module_permission`, dan `role_module_permission`.
