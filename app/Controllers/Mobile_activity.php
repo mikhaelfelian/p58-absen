@@ -25,12 +25,27 @@ class Mobile_activity extends BaseController
 	
 	public function index() {
 		$userCompanyModel = new UserCompanyModel;
+		$companyModel = new \App\Models\CompanyModel;
 		$id_user = $this->session->get('user')['id_user'];
 		
-		// Get active companies for this user
+		// Get active companies for this user with assignment details
 		$companies = $userCompanyModel->getActiveCompanyByUser($id_user);
 		
-		$this->data['companies'] = $companies;
+		// Get patrol settings for each company
+		$companies_with_patrol = [];
+		foreach ($companies as $company) {
+			// Get company's patrol mode setting
+			$setting = $companyModel->getCompanySetting($company->id_company);
+			$company->is_patrol_mode = $setting['is_patrol_mode'] ?? 'N';
+			
+			// Check if this user is required to patrol for this company
+			// Combined: company patrol mode AND user's patrol requirement
+			$company->isPatrolRequired = ($setting['is_patrol_mode'] == 'Y' && $company->isPatrolRequired == 1) ? 1 : 0;
+			
+			$companies_with_patrol[] = $company;
+		}
+		
+		$this->data['companies'] = $companies_with_patrol;
 		
 		echo view('themes/modern/mobile-activity-home.php', $this->data);
 	}

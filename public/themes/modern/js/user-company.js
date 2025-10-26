@@ -15,9 +15,9 @@ $(document).ready(function() {
 			width: '100%'
 		});
 		
-		// Initialize Flatpickr for date picker
+		// Initialize Flatpickr for date inputs
 		$('.datepicker').flatpickr({
-			dateFormat: 'd-m-Y',
+			dateFormat: 'Y-m-d',
 			locale: 'id'
 		});
 	}

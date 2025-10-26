@@ -69,6 +69,7 @@ class CompanyModel extends \App\Models\BaseModel
 			'hari_kerja' => [1,2,3,4,5],
 			'gunakan_foto_selfi' => 'Y',
 			'gunakan_radius_lokasi' => 'Y',
+			'is_patrol_mode' => 'N', // Default: patrol mode disabled
 			'latitude' => ($company && isset($company->latitude)) ? $company->latitude : '-7.797068',
 			'longitude' => ($company && isset($company->longitude)) ? $company->longitude : '110.370529',
 			'radius_nilai' => ($company && isset($company->radius_nilai)) ? $company->radius_nilai : '1.00',
@@ -96,6 +97,7 @@ class CompanyModel extends \App\Models\BaseModel
 			'hari_kerja' => $hari_kerja, // Ensure integers
 			'gunakan_foto_selfi' => $this->request->getPost('gunakan_foto_selfi') ?: 'Y',
 			'gunakan_radius_lokasi' => $this->request->getPost('gunakan_radius_lokasi') ?: 'Y',
+			'is_patrol_mode' => $this->request->getPost('is_patrol_mode') ?: 'N',
 			'latitude' => $this->request->getPost('setting_latitude') ?: $this->request->getPost('latitude'),
 			'longitude' => $this->request->getPost('setting_longitude') ?: $this->request->getPost('longitude'),
 			'radius_nilai' => $this->request->getPost('setting_radius_nilai') ?: $this->request->getPost('radius_nilai'),

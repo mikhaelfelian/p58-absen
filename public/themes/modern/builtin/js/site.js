@@ -6,7 +6,7 @@
 
 let optionFlatpickr = {
 	enableTime: false,
-	dateFormat: "d-m-Y",
+	dateFormat: "Y-m-d",
 	time_24hr: true,
 	locale: "id"
 }

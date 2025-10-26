@@ -236,7 +236,25 @@ $(document).ready(function() {
 	
 	// Load existing patrol points if editing
 	loadExistingPatrolPoints();
+	
+	// Toggle patrol section based on is_patrol_mode
+	togglePatrolSection();
+	$('#is-patrol-mode').on('change', function() {
+		togglePatrolSection();
+	});
 });
+
+// Toggle patrol section visibility
+function togglePatrolSection() {
+	var isPatrolMode = $('#is-patrol-mode').val();
+	if (isPatrolMode === 'Y') {
+		$('#patrol-section').show();
+		$('#patrol-card').show();
+	} else {
+		$('#patrol-section').hide();
+		$('#patrol-card').hide();
+	}
+}
 
 function addPatrolPoint() {
 	patrolCounter++;

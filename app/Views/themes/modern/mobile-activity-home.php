@@ -242,6 +242,9 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 <script>
 // GPS-based company auto-detection (anti-cheating)
 (function() {
+	// Track current step
+	var currentStep = 1;
+	
 	// Function to calculate distance between two coordinates
 	function getDistance(lat1, lon1, lat2, lon2) {
 		const R = 6371; // Radius of Earth in kilometers
@@ -308,6 +311,27 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 				
 				// Set hidden field
 				document.getElementById('id_company').value = nearestCompany.id_company;
+				
+			// Check if patrol is required
+			// isPatrolRequired is already set on backend (company mode + user requirement)
+			var isPatrolRequired = nearestCompany.isPatrolRequired === 1;
+			
+			console.log('isPatrolRequired:', isPatrolRequired);
+			
+			// If patrol is NOT required, skip step 1 and go to step 2
+			if (!isPatrolRequired) {
+				console.log('Skipping patrol scan - going directly to step 2');
+				// Hide step 1, show step 2
+				$('#step-1').hide();
+				$('#step-2').show();
+				currentStep = 2;
+			} else {
+				console.log('Patrol required - showing step 1');
+				// Show step 1 for QR scanning
+				$('#step-1').show();
+				$('#step-2').hide();
+				currentStep = 1;
+			}
 			} else {
 				// No company found within radius
 				document.getElementById('company-not-found').style.display = 'block';

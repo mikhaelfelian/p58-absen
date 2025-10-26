@@ -34,31 +34,22 @@ class User_company extends BaseController
 	public function add() {
 		$this->hasPermission('create');
 		
-		if (!empty($_POST['submit'])) {
-			$error = $this->validateForm();
-			if ($error) {
-				$this->data['message'] = ['status' => 'error', 'message' => $error];
-				$this->data['form_errors'] = $error;
-			} else {
-				$result = $this->model->saveData();
-				$this->data['message'] = $result;
-				
-				if ($result['status'] == 'ok') {
-					return redirect()->to($this->moduleURL);
-				}
-			}
-		}
-		
 		// Get all users
 		$sql = 'SELECT id_user, nama, nip FROM user ORDER BY nama';
 		$this->data['users'] = $this->model->db->query($sql)->getResult();
 		
 		// Get active companies
-		$companyModel = new CompanyModel;
+		$companyModel = new CompanyModel();
 		$this->data['companies'] = $companyModel->getActiveCompanies();
 		
 		$this->data['mode'] = 'add';
-		$this->data['form_errors'] = [];
+		$this->data['form_errors'] = $this->data['form_errors'] ?? [];
+		
+		// Get flash message
+		if (session()->has('message')) {
+			$this->data['message'] = session()->get('message');
+		}
+		
 		$this->view('user-company-form.php', $this->data);
 	}
 	
@@ -73,33 +64,80 @@ class User_company extends BaseController
 			return;
 		}
 		
-		if (!empty($_POST['submit'])) {
-			$error = $this->validateForm();
-			if ($error) {
-				$this->data['message'] = ['status' => 'error', 'message' => $error];
-				$this->data['form_errors'] = $error;
-			} else {
-				$result = $this->model->saveData();
-				$this->data['message'] = $result;
-				
-				if ($result['status'] == 'ok') {
-					return redirect()->to($this->moduleURL);
-				}
-			}
-		}
-		
 		// Get all users
 		$sql = 'SELECT id_user, nama, nip FROM user ORDER BY nama';
 		$this->data['users'] = $this->model->db->query($sql)->getResult();
 		
 		// Get active companies
-		$companyModel = new CompanyModel;
+		$companyModel = new CompanyModel();
 		$this->data['companies'] = $companyModel->getActiveCompanies();
 		
 		$this->data['mode'] = 'edit';
 		$this->data['assignment'] = $assignment;
-		$this->data['form_errors'] = [];
+		$this->data['form_errors'] = $this->data['form_errors'] ?? [];
+		
+		// Get flash message
+		if (session()->has('message')) {
+			$this->data['message'] = session()->get('message');
+		}
+		
 		$this->view('user-company-form.php', $this->data);
+	}
+	
+	public function store() 
+	{
+		$error = $this->validateForm();
+
+		if ($error) {
+			$this->data['message']     = ['status' => 'error', 'message' => $error];
+			$this->data['form_errors'] = $error;
+
+			// Return to form with errors
+			if (!empty($_POST['id'])) {
+				return redirect()->to($this->moduleURL . '/edit?id=' . $_POST['id']);
+			}
+			return redirect()->to($this->moduleURL . '/add');
+		}
+
+		// Prepare data
+		$request           = $this->request;
+		$idUser            = $request->getPost('id_user');
+		$idCompany         = $request->getPost('id_company');
+		$tanggalMulai      = $request->getPost('tanggal_mulai');
+		$tanggalSelesai    = $request->getPost('tanggal_selesai');
+		$status            = $request->getPost('status') ?? 'active';
+		$isPatrolRequired  = $request->getPost('isPatrolRequired', FILTER_DEFAULT, FILTER_NULL_ON_FAILURE) ?? 0;
+		$keterangan        = $request->getPost('keterangan');
+
+		$data = [
+			'id_user'          => $idUser,
+			'id_company'       => $idCompany,
+			'tanggal_mulai'    => !empty($tanggalMulai) ? $tanggalMulai : null,
+			'tanggal_selesai'  => !empty($tanggalSelesai) ? $tanggalSelesai : null,
+			'status'           => $status,
+			'isPatrolRequired' => $isPatrolRequired,
+			'keterangan'       => $keterangan,
+		];
+
+		// Add primary key for update
+		if (!empty($_POST['id'])) {
+			$data['id_user_company'] = $_POST['id'];
+		}
+
+		// Save using Model->save() method
+		$result = $this->model->saveData($data);
+
+		if ($result['status'] == 'ok') {
+			// Redirect back to edit page with success message
+			if (!empty($_POST['id'])) {
+				return redirect()->to($this->moduleURL . '/edit?id=' . $_POST['id'])
+					->with('message', $result);
+			}
+			return redirect()->to($this->moduleURL . '/edit?id=' . $result['id'])
+				->with('message', $result);
+		}
+
+		return redirect()->back()->with('message', $result);
 	}
 	
 	private function validateForm() {

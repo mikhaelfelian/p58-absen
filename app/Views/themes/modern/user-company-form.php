@@ -26,8 +26,49 @@
 				show_message($message);
 			}
 		?>
-		<form method="post" action="" class="form-user-company">
-			<input type="hidden" name="id" value="<?=@$assignment->id_user_company?>">
+		
+		<?php if (!empty($message)): ?>
+		<script>
+		$(document).ready(function() {
+			<?php if ($message['status'] == 'success'): ?>
+			// Show success message with SweetAlert
+			Swal.fire({
+				icon: 'success',
+				title: 'Berhasil!',
+				text: '<?= $message['message'] ?>',
+				timer: 3000,
+				showConfirmButton: false,
+				toast: true,
+				position: 'top-end'
+			});
+			<?php elseif ($message['status'] == 'error'): ?>
+			// Show error message with SweetAlert
+			Swal.fire({
+				icon: 'error',
+				title: 'Gagal!',
+				text: '<?= is_array($message['message']) ? implode(', ', $message['message']) : $message['message'] ?>',
+				confirmButtonText: 'OK'
+			});
+			<?php elseif ($message['status'] == 'ok'): ?>
+			// Show success message with SweetAlert
+			Swal.fire({
+				icon: 'success',
+				title: 'Berhasil!',
+				text: '<?= $message['message'] ?>',
+				timer: 3000,
+				showConfirmButton: false,
+				toast: true,
+				position: 'top-end'
+			});
+			<?php endif; ?>
+			
+			// Scroll to top to show the message
+			$('html, body').animate({scrollTop: 0}, 500);
+		});
+		</script>
+		<?php endif; ?>
+		<?php echo form_open($module_url . '/store', ['class' => 'form-user-company']); ?>
+			<?php echo form_hidden('id', @$assignment->id_user_company); ?>
 			
 			<div class="row mb-3">
 				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Pilih Pegawai <span class="text-primary fw-bold">*</span></label>
@@ -40,9 +81,9 @@
 						</option>
 						<?php endforeach; ?>
 					</select>
-					<?php if (@$assignment): ?>
-					<input type="hidden" name="id_user" value="<?=$assignment->id_user?>">
-					<?php endif; ?>
+		<?php if (@$assignment): ?>
+		<?php echo form_hidden('id_user', $assignment->id_user); ?>
+		<?php endif; ?>
 					<?php if (!empty($form_errors['id_user'])) echo '<small class="text-danger fw-medium">' . $form_errors['id_user'] . '</small>'?>
 				</div>
 			</div>
@@ -62,10 +103,20 @@
 				</div>
 			</div>
 			
+			<?php 
+				$tanggal_mulai_value = '';
+				$tanggal_selesai_value = '';
+				if (!empty($assignment->tanggal_mulai)) {
+					$tanggal_mulai_value = date('Y-m-d', strtotime($assignment->tanggal_mulai));
+				}
+				if (!empty($assignment->tanggal_selesai)) {
+					$tanggal_selesai_value = date('Y-m-d', strtotime($assignment->tanggal_selesai));
+				}
+			?>
 			<div class="row mb-3">
 				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Tanggal Mulai</label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
-					<input type="text" class="form-control datepicker border-2" name="tanggal_mulai" value="<?=@$assignment->tanggal_mulai ? date('d-m-Y', strtotime($assignment->tanggal_mulai)) : ''?>" placeholder="dd-mm-yyyy">
+					<input type="text" class="form-control border-2 datepicker" name="tanggal_mulai" value="<?=$tanggal_mulai_value?>" placeholder="yyyy-mm-dd">
 					<small class="text-muted fw-medium">Kosongkan jika berlaku mulai sekarang</small>
 				</div>
 			</div>
@@ -73,8 +124,30 @@
 			<div class="row mb-3">
 				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Tanggal Selesai</label>
 				<div class="col-sm-8 col-md-6 col-lg-5">
-					<input type="text" class="form-control datepicker border-2" name="tanggal_selesai" value="<?=@$assignment->tanggal_selesai ? date('d-m-Y', strtotime($assignment->tanggal_selesai)) : ''?>" placeholder="dd-mm-yyyy">
+					<input type="text" class="form-control border-2 datepicker" name="tanggal_selesai" value="<?=$tanggal_selesai_value?>" placeholder="yyyy-mm-dd">
 					<small class="text-muted fw-medium">Kosongkan jika tidak ada batas waktu</small>
+				</div>
+			</div>
+			
+			<div class="row mb-3">
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Wajib Patroli ?</label>
+				<div class="col-sm-8 col-md-6 col-lg-5">
+				<?php 
+					// Get current value - handle both string and integer
+					$patrolValue = isset($assignment->isPatrolRequired) ? (string) $assignment->isPatrolRequired : '0';
+				?>
+				<select class="form-control border-2" name="isPatrolRequired">
+					<option value="1" <?=$patrolValue === '1' || $patrolValue === 1 ? 'selected' : ''?>>Ya</option>
+					<option value="0" <?=$patrolValue === '0' || $patrolValue === 0 || $patrolValue === '' ? 'selected' : ''?>>Tidak</option>
+				</select>
+				<small class="text-muted fw-medium">Jika Ya, maka user akan diminta untuk patrol saat input activity</small>
+				</div>
+			</div>
+			
+			<div class="row mb-3">
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Keterangan</label>
+				<div class="col-sm-8 col-md-6 col-lg-5">
+					<textarea class="form-control border-2" name="keterangan" rows="3" placeholder="Masukkan keterangan tambahan (opsional)"><?=@$assignment->keterangan?></textarea>
 				</div>
 			</div>
 			
@@ -90,23 +163,16 @@
 			</div>
 			
 			<div class="row mb-3">
-				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Keterangan</label>
-				<div class="col-sm-8 col-md-6 col-lg-5">
-					<textarea class="form-control border-2" name="keterangan" rows="3" placeholder="Masukkan keterangan tambahan (opsional)"><?=@$assignment->keterangan?></textarea>
-				</div>
-			</div>
-			
-			<div class="row mb-3">
 				<div class="col-sm-8 col-md-6 col-lg-5 offset-sm-3 offset-md-2 offset-lg-3 offset-xl-2">
-					<button type="submit" name="submit" value="true" class="btn btn-primary btn-lg px-4 me-2">
+					<button type="submit" name="submit" value="true" class="btn btn-primary btn-sm">
 						<i class="fas fa-save me-2"></i>Simpan
 					</button>
-					<a href="<?=$module_url?>" class="btn btn-outline-secondary btn-lg px-4">
+					<a href="<?=$module_url?>" class="btn btn-outline-secondary btn-sm">
 						<i class="fas fa-times me-2"></i>Batal
 					</a>
 				</div>
 			</div>
-		</form>
+		<?php echo form_close(); ?>
 	</div>
 </div>
 

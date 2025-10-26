@@ -16,7 +16,7 @@ class UserCompanyModel extends \App\Models\BaseModel
 	protected $useSoftDeletes = false;
 	protected $allowedFields = [
 		'id_user', 'id_company', 'tanggal_mulai', 'tanggal_selesai',
-		'status', 'keterangan', 'id_user_input', 'tgl_input', 
+		'status', 'isPatrolRequired', 'keterangan', 'id_user_input', 'tgl_input', 
 		'id_user_update', 'tgl_update'
 	];
 	
@@ -36,7 +36,7 @@ class UserCompanyModel extends \App\Models\BaseModel
 	
 	public function getActiveCompanyByUser($id_user) {
 		$today = date('Y-m-d');
-		$sql = 'SELECT user_company.*, company.*
+		$sql = 'SELECT user_company.*, user_company.isPatrolRequired, company.*
 				FROM user_company
 				LEFT JOIN company USING(id_company)
 				WHERE user_company.id_user = ? 
@@ -57,38 +57,33 @@ class UserCompanyModel extends \App\Models\BaseModel
 		return $this->db->query($sql, [$id_company])->getResult();
 	}
 	
-	public function saveData() {
-		$fields = ['id_user', 'id_company', 'tanggal_mulai', 'tanggal_selesai', 'status', 'keterangan'];
-		
-		$data_db = [];
-		foreach ($fields as $field) {
-			if (isset($_POST[$field])) {
-				$value = $this->request->getPost($field);
-				$data_db[$field] = $value === '' ? null : $value;
+	public function saveData($data) {
+		try {
+			log_message('debug', 'saveData with: ' . json_encode($data));
+			
+			// Set timestamps
+			if (isset($data[$this->primaryKey])) {
+				$data['id_user_update'] = $this->session->get('user')['id_user'];
+				$data['tgl_update'] = date('Y-m-d H:i:s');
+			} else {
+				$data['id_user_input'] = $this->session->get('user')['id_user'];
+				$data['tgl_input'] = date('Y-m-d H:i:s');
 			}
+			
+			// Use Model's save() - automatically handles insert/update
+			$result = $this->save($data);
+			
+			if (!$result) {
+				$errors = $this->errors();
+				return ['status' => 'error', 'message' => 'Data gagal disimpan: ' . implode(', ', $errors)];
+			}
+			
+			$id = isset($data[$this->primaryKey]) ? $data[$this->primaryKey] : $this->getInsertID();
+			return ['status' => 'ok', 'message' => 'Data berhasil disimpan', 'id' => $id];
+			
+		} catch (\Exception $e) {
+			return ['status' => 'error', 'message' => 'Data gagal disimpan: ' . $e->getMessage()];
 		}
-		
-		$this->db->transStart();
-		
-		if ($this->request->getPost('id')) {
-			$data_db['id_user_update'] = $this->session->get('user')['id_user'];
-			$data_db['tgl_update'] = date('Y-m-d H:i:s');
-			$save = $this->db->table('user_company')->update($data_db, ['id_user_company' => $_POST['id']]);
-			$id = $_POST['id'];
-		} else {
-			$data_db['id_user_input'] = $this->session->get('user')['id_user'];
-			$data_db['tgl_input'] = date('Y-m-d H:i:s');
-			$save = $this->db->table('user_company')->insert($data_db);
-			$id = $this->db->insertID();
-		}
-		
-		$this->db->transComplete();
-		
-		if ($this->db->transStatus() === false) {
-			return ['status' => 'error', 'message' => 'Data gagal disimpan'];
-		}
-		
-		return ['status' => 'ok', 'message' => 'Data berhasil disimpan', 'id' => $id];
 	}
 	
 	public function deleteData() {

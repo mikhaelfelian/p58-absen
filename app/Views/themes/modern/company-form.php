@@ -219,9 +219,20 @@
 					<small class="text-muted fw-medium">Jika Ya, maka presensi harus dilakukan didalam radius yang telah ditetapkan</small>
 				</div>
 			</div>
+			
+			<div class="row mb-3">
+				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Aktifkan Modul Patroli</label>
+				<div class="col-sm-8 col-md-6 col-lg-5">
+					<select class="form-control border-2" name="is_patrol_mode" id="is-patrol-mode" style="width:auto">
+						<option value="Y" <?=@$company_setting['is_patrol_mode'] == 'Y' ? 'selected' : ''?>>Ya</option>
+						<option value="N" <?=@$company_setting['is_patrol_mode'] == 'N' || !isset($company_setting['is_patrol_mode']) ? 'selected' : ''?>>Tidak</option>
+					</select>
+					<small class="text-muted fw-medium">Jika Ya, maka pengguna akan diminta untuk scan titik patroli saat input aktivitas</small>
+				</div>
+			</div>
 
 			<!-- Patrol Points Section -->
-			<div class="row mb-3">
+			<div class="row mb-3" id="patrol-section">
 				<div class="col-12">
 					<div class="bg-light p-3 ps-4 mb-3 rounded">
 						<h5 class="m-0 fw-semibold text-dark">
@@ -232,7 +243,7 @@
 				</div>
 			</div>
 
-			<div class="row mb-3">
+			<div class="row mb-3" id="patrol-card">
 				<div class="col-12">
 					<div class="card border-0 bg-light">
 						<div class="card-body">
