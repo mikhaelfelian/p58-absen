@@ -67,8 +67,13 @@ php_errors.log
 backup/*
 public/files/~$Format Data Barang.xlsx
 
-# Dotfiles
+# Ignore environment and server configuration files
 .env
 /.htaccess
 
+# Ignore update directory
 /update/
+
+# Ignore compressed archives
+*.zip
+*.rar
