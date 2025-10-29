@@ -25,7 +25,7 @@ app.imagesURL = 'https://absen.tigerasoft.com/public/images/'
 
 app.name                        = 'Absensi Online'
 app.version                     = '1.0.0'
-app.domain                      = 'kaldera.com'
+app.domain                      = 'sitepat.com'
 app.timezone                    = 'Asia/Jakarta'
 app.defaultTimeZone             = 'Asia/Jakarta'
 app.forceGlobalSecureRequests   = false
@@ -69,7 +69,7 @@ encryption.key              = 'hex2bin:c2f4a5b3d8e9c7f6a1b2d3e4f5a6b7c8d9e0f1a2b
 # SESSION
 #--------------------------------------------------------------------
 session.driver              = 'CodeIgniter\Session\Handlers\DatabaseHandler'
-session.cookieName          = 'tcs_session'
+session.cookieName          = 'sitepat_session'
 session.expiration          = 25200
 session.savePath            = 'tbl_sessions'
 session.matchIP             = false

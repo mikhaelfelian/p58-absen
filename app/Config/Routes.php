@@ -13,3 +13,7 @@ $routes->setDefaultMethod('index');
 $routes->setTranslateURIDashes(true);
 $routes->set404Override();
 $routes->setAutoRoute(true);
+
+
+
+$routes->get('dashboard-user', 'Dashboard::dashboard_user');

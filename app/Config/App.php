@@ -23,7 +23,30 @@ class App extends BaseConfig
 	
 	public $imagesPath = ROOTPATH . 'public/images/';
 	
-	public $imagesURL = 'http://localhost/jagowebdev/aplikasi-absen/public/images/';
+	// Auto-detect base URL if not set
+	public function __construct()
+	{
+		parent::__construct();
+		
+		// Auto-detect base URL
+		if (isset($_SERVER['HTTP_HOST'])) {
+			$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+			$host = $_SERVER['HTTP_HOST'];
+			$script = $_SERVER['SCRIPT_NAME'];
+			$scriptDir = dirname($script);
+			
+			// Remove 'public' from path if present
+			$path = str_replace('/public', '', $scriptDir);
+			
+			if ($path === '/') {
+				$this->imagesURL = $protocol . '://' . $host . '/public/images/';
+			} else {
+				$this->imagesURL = $protocol . '://' . $host . $path . '/public/images/';
+			}
+		} else {
+			$this->imagesURL = 'http://localhost/jagowebdev/aplikasi-absen/public/images/';
+		}
+	}
 	
 	public $checkRoleAction = ['enable_global' => true, 'field' =>'id_user_input'];
 	

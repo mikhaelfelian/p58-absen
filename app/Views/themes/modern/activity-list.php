@@ -6,15 +6,14 @@
 		}
 		
 		$column = [
-			'ignore_urut' => '#'
-			, 'nama' => 'Nama Pegawai'
-			, 'nama_company' => 'Company'
-			, 'tanggal' => 'Tanggal'
-			, 'waktu' => 'Waktu'
-			, 'judul_activity' => 'Judul Activity'
-			, 'foto_activity' => 'Foto'
-			, 'status' => 'Status'
-			, 'ignore_action' => 'Aksi'
+			'ignore_urut'    => '#',
+			'nama'           => 'Pegawai',
+			'nama_company'   => 'Lokasi',
+			'tanggal'        => 'Tanggal',
+			'waktu'          => 'Waktu',
+			'judul_activity' => 'Aktifitas',
+			'status'         => 'Status',
+			'ignore_action'  => 'Aksi',
 		];
 		$th = '';
 		foreach ($column as $val) {

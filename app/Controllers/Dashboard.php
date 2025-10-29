@@ -192,7 +192,45 @@ class Dashboard extends BaseController
             $this->data['message']['message'] = 'Data tidak ditemukan';
 		}
 		
-		$this->view('dashboard.php', $this->data);
+		$this->view('dashboard', $this->data);
+	}
+	
+	public function dashboard_user()
+	{
+		// Minimal dashboard for user - show only their own attendance data
+		$id_user = $this->session->get('user')['id_user'];
+		$tahun = date('Y');
+		
+		// Get list of years (for dropdown if needed)
+		$result = $this->model->getListTahun();
+		$list_tahun = [];
+		foreach ($result as $val) {
+			$list_tahun[$val['tahun']] = $val['tahun'];
+		}
+		
+		$this->data['list_tahun'] = $list_tahun;
+		$this->data['tahun'] = $tahun;
+		
+		// Get user's attendance statistics for current year
+		$stats_tahun = $this->model->getUserAttendanceStats($id_user, $tahun);
+		
+		// Get recent presensi for the user
+		$recent_presensi = $this->model->getRecentPresensi($id_user, 10);
+		
+		// Provide minimal data for view compatibility
+		$this->data['stats_tahun'] = $stats_tahun;
+		$this->data['recent_presensi'] = $recent_presensi;
+		$this->data['presensi_pertahun'] = [];
+		$this->data['total_jumlah_presensi'] = [$tahun => 0];
+		$this->data['total_presensi_masuk'] = [$tahun => 0];
+		$this->data['total_presensi_pulang'] = [$tahun => 0];
+		$this->data['presensi_perbulan'] = [];
+		$this->data['jml_data_presensi'] = 0;
+		$this->data['presensi_urut_tepat_waktu'] = [];
+		
+		$this->data['message']['status'] = 'ok';
+		
+		$this->view('dashboard-user', $this->data);
 	}
 	
 	public function generateExcel($output) 

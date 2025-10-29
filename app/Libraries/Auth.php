@@ -46,13 +46,21 @@ class Auth
 	public function generateSessionFormToken($session_name = null, $token_string = '') 
 	{
 		$exp = explode (':', $token_string);
-		$selector = $exp[0];
-		$token = $exp[1];
+		$selector = $exp[0] ?? '';
+		$token = $exp[1] ?? '';
+		
+		// Initialize token session if not exists
+		if (!isset($_SESSION['token'])) {
+			$_SESSION['token'] = [];
+		}
 		
 		if ($session_name) {
-			$_SESSION['token'][$session_name] = [$selector => hash('sha256', hex2bin($token))];
+			if (!isset($_SESSION['token'][$session_name])) {
+				$_SESSION['token'][$session_name] = [];
+			}
+			$_SESSION['token'][$session_name][$selector] = hash('sha256', hex2bin($token));
 		} else {
-			$_SESSION['token'] = [$selector => hash('sha256', hex2bin($token))];
+			$_SESSION['token'][$selector] = hash('sha256', hex2bin($token));
 		}
 	}
 	
@@ -85,13 +93,24 @@ class Auth
 		$request = \Config\Services::request();
 		$form_token = explode (':', $request->getVar($post_name));
 		
-		$form_selector = $form_token[0];
-		$sess_index = $session_name ? $_SESSION['token'][$session_name] : $_SESSION['token'];
+		// Check if token exists in session
+		if (!isset($_SESSION['token'])) {
+			return false;
+		}
+		
+		$form_selector = $form_token[0] ?? '';
+		
+		// Check if form_selector exists
+		if (empty($form_selector)) {
+			return false;
+		}
+		
+		$sess_index = $session_name ? ($_SESSION['token'][$session_name] ?? []) : ($_SESSION['token'] ?? []);
 		
 		if (!key_exists($form_selector, $sess_index))
 				return false;
 			
-		return $this->validateToken($form_token[1], $sess_index[$form_selector]);
+		return $this->validateToken($form_token[1] ?? '', $sess_index[$form_selector]);
 	}
 	
 	public function validateToken($provided_string, $hashed_token) 

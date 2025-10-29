@@ -27,6 +27,15 @@ class ActivityModel extends \App\Models\BaseModel
 		parent::__construct();
 	}
 	
+	public function getAllUser() {
+		return $this->db->table('user')
+			->select('id_user, nama')
+			->where('status', 'active')
+			->orderBy('nama')
+			->get()
+			->getResultArray();
+	}
+	
 	public function getActivityByUser($id_user, $start_date = null, $end_date = null) {
 		$where_date = '';
 		if ($start_date && $end_date) {
@@ -69,6 +78,30 @@ class ActivityModel extends \App\Models\BaseModel
 	}
 	
 	public function saveData($data) {
+		// Handle foto_activity - if it's already a JSON string, use it; otherwise convert array to JSON
+		$foto_activity = null;
+		if (!empty($data['foto_activity'])) {
+			if (is_string($data['foto_activity'])) {
+				// Check if it's already JSON
+				$decoded = json_decode($data['foto_activity'], true);
+				if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+					// It's valid JSON, store as is
+					$foto_activity = $data['foto_activity'];
+				} else {
+					// It's a single photo (base64), convert to array
+					$foto_activity = json_encode([[
+						'file_name' => 'photo_' . date('YmdHis') . '.jpg',
+						'image' => $data['foto_activity'],
+						'lat' => $data['latitude'] ?? null,
+						'lon' => $data['longitude'] ?? null
+					]]);
+				}
+			} elseif (is_array($data['foto_activity'])) {
+				// It's already an array, convert to JSON
+				$foto_activity = json_encode($data['foto_activity']);
+			}
+		}
+		
 		$data_db = [
 			'id_user' => $data['id_user'],
 			'id_company' => $data['id_company'],
@@ -77,7 +110,7 @@ class ActivityModel extends \App\Models\BaseModel
 			'waktu' => $data['waktu'],
 			'judul_activity' => $data['judul_activity'],
 			'deskripsi_activity' => $data['deskripsi_activity'],
-			'foto_activity' => $data['foto_activity'] ?? null,
+			'foto_activity' => $foto_activity,
 			'latitude' => $data['latitude'] ?? null,
 			'longitude' => $data['longitude'] ?? null,
 			'status' => 'pending',

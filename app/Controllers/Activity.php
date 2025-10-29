@@ -115,15 +115,13 @@ class Activity extends BaseController
 			}
 			
 			// Actions
-			$val->ignore_action = '<div class="btn-action-group">' . 
-				btn_label(['label' => 'Detail'
-						, 'icon' => 'fas fa-eye'
+			$val->ignore_action = btn_link(['url' => $this->moduleURL . '/detail?id=' . $val->id_activity
 						, 'attr' => ['class' => 'btn btn-info btn-xs me-1'
-									, 'href' => $this->moduleURL . '/detail?id=' . $val->id_activity
 									, 'data-bs-toggle' => 'tooltip', 'data-bs-title' => 'View Detail'
 								]
-						]
-				);
+						, 'icon' => 'fas fa-eye'
+						, 'label' => 'Detail'
+					]);
 			
 			if (has_permission('approve') && $val->status == 'pending') {
 				$val->ignore_action .= btn_label(['label' => 'Approve'

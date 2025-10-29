@@ -268,4 +268,49 @@ class DashboardModel extends \App\Models\BaseModel
 				
 		return ['data' => $data, 'total_filtered' => $total_filtered];
 	}
+	
+	/**
+	 * Get minimal attendance stats for current user
+	 */
+	public function getUserAttendanceStats($id_user, $tahun) {
+		// Get basic stats: total attendance, on time, late, absent
+		$start_date = $tahun . '-01-01';
+		$end_date = date('Y-m-d');
+		
+		$sql = 'SELECT 
+					COUNT(*) AS total_presensi,
+					SUM(CASE WHEN jenis_presensi = "masuk" THEN 1 ELSE 0 END) AS masuk,
+					SUM(CASE WHEN jenis_presensi = "pulang" THEN 1 ELSE 0 END) AS pulang,
+					SUM(CASE WHEN waktu > batas_waktu_presensi THEN 1 ELSE 0 END) AS terlambat,
+					SUM(CASE WHEN jenis_presensi = "masuk" AND waktu <= batas_waktu_presensi THEN 1 ELSE 0 END) AS tepat_waktu
+				FROM user_presensi
+				WHERE id_user = ? AND tanggal BETWEEN ? AND ?';
+		
+		$result = $this->db->query($sql, [$id_user, $start_date, $end_date])->getRowArray();
+		
+		// Get today's attendance status
+		$today = date('Y-m-d');
+		$today_sql = 'SELECT jenis_presensi, waktu, batas_waktu_presensi 
+					  FROM user_presensi 
+					  WHERE id_user = ? AND tanggal = ?';
+		$today_attendance = $this->db->query($today_sql, [$id_user, $today])->getResultArray();
+		
+		return [
+			'stats' => $result,
+			'today_attendance' => $today_attendance
+		];
+	}
+	
+	/**
+	 * Get recent presensi for a user
+	 */
+	public function getRecentPresensi($id_user, $limit = 10) {
+		$sql = 'SELECT tanggal, jenis_presensi, waktu, batas_waktu_presensi
+				FROM user_presensi
+				WHERE id_user = ?
+				ORDER BY tanggal DESC, waktu DESC
+				LIMIT ?';
+		
+		return $this->db->query($sql, [$id_user, $limit])->getResultArray();
+	}
 }

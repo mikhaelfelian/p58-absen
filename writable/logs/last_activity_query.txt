@@ -1,0 +1,18 @@
+SQL: SELECT activity.*, 
+					company.nama_company, 
+					user.nama, 
+					user.nip,
+					approver.nama AS approved_by_name
+				FROM activity
+				LEFT JOIN company USING(id_company)
+				LEFT JOIN user USING(id_user)
+				LEFT JOIN user AS approver ON activity.approved_by = approver.id_user
+				 WHERE tanggal BETWEEN "2025-10-01" AND "2025-10-27" AND activity.id_user = 5
+				ORDER BY tanggal DESC, waktu DESC
+Start: 2025-10-01
+End: 2025-10-27
+User: 5
+Company: null
+Time: 2025-10-27 10:15:19
+
+Result Count: 2

@@ -113,25 +113,83 @@ class Mobile_activity extends BaseController
 			$error[] = 'Deskripsi activity harus diisi';
 		}
 		
-		// Handle photo upload
-		$foto_filename = null;
+		// Handle photo upload (multiple photos as JSON array)
+		$foto_activity_data = null;
 		if (!empty($data_array['foto'])) {
-			$image = explode('data:image/jpeg;base64,', $data_array['foto']);
-			$image_data = base64_decode(trim($image[1]));
+			$foto_data = $data_array['foto'];
 			
-			$foto_filename = 'activity_' . time() . '_' . uniqid() . '.jpg';
-			$upload_path = ROOTPATH . 'public/images/activity/';
+			// Check if it's JSON (multiple photos)
+			$photos_array = json_decode($foto_data, true);
 			
-			if (!is_dir($upload_path)) {
-				mkdir($upload_path, 0777, true);
+			if (json_last_error() === JSON_ERROR_NONE && is_array($photos_array)) {
+				// Multiple photos - save each to file
+				$upload_path = ROOTPATH . 'public/images/activity/';
+				if (!is_dir($upload_path)) {
+					mkdir($upload_path, 0777, true);
+				}
+				
+				$saved_photos = [];
+				foreach ($photos_array as $photo) {
+					if (isset($photo['image'])) {
+						$image = explode('data:image/jpeg;base64,', $photo['image']);
+						$image_data = base64_decode(trim($image[1]));
+						
+						$filename = 'activity_' . time() . '_' . uniqid() . '.jpg';
+						file_put_contents($upload_path . $filename, $image_data);
+						
+						$saved_photos[] = [
+							'file_name' => $filename,
+							'lat' => $photo['lat'] ?? null,
+							'lon' => $photo['lon'] ?? null
+						];
+					}
+				}
+				
+				// Convert saved photos to JSON
+				$foto_activity_data = json_encode($saved_photos);
+			} else {
+				// Single photo (legacy support)
+				$image = explode('data:image/jpeg;base64,', $foto_data);
+				$image_data = base64_decode(trim($image[1]));
+				
+				$foto_filename = 'activity_' . time() . '_' . uniqid() . '.jpg';
+				$upload_path = ROOTPATH . 'public/images/activity/';
+				
+				if (!is_dir($upload_path)) {
+					mkdir($upload_path, 0777, true);
+				}
+				
+				file_put_contents($upload_path . $foto_filename, $image_data);
+				
+				// Convert to new format
+				$foto_activity_data = json_encode([[
+					'file_name' => $foto_filename,
+					'lat' => $data_array['location']['coords']['latitude'] ?? null,
+					'lon' => $data_array['location']['coords']['longitude'] ?? null
+				]]);
 			}
-			
-			file_put_contents($upload_path . $foto_filename, $image_data);
 		}
 		
 		if ($error) {
 			echo json_encode(['status' => 'error', 'message' => $error]);
 			return;
+		}
+		
+		// Extract GPS coordinates from location object
+		$latitude = null;
+		$longitude = null;
+		
+		if (!empty($data_array['location'])) {
+			// Check if location has lat/lng directly (new format)
+			if (isset($data_array['location']['lat'])) {
+				$latitude = $data_array['location']['lat'];
+				$longitude = $data_array['location']['lng'] ?? null;
+			}
+			// Check if location has coords.latitude (old format)
+			elseif (isset($data_array['location']['coords']['latitude'])) {
+				$latitude = $data_array['location']['coords']['latitude'];
+				$longitude = $data_array['location']['coords']['longitude'] ?? null;
+			}
 		}
 		
 		// Save activity
@@ -143,10 +201,13 @@ class Mobile_activity extends BaseController
 			'waktu' => date('H:i:s'),
 			'judul_activity' => $data_array['judul_activity'],
 			'deskripsi_activity' => $data_array['deskripsi_activity'],
-			'foto_activity' => $foto_filename,
-			'latitude' => $data_array['location']['coords']['latitude'] ?? null,
-			'longitude' => $data_array['location']['coords']['longitude'] ?? null,
+			'foto_activity' => $foto_activity_data,
+			'latitude' => $latitude,
+			'longitude' => $longitude,
 		];
+		
+		// Log activity data for debugging
+		log_message('debug', 'Saving activity with GPS: lat=' . $latitude . ', lon=' . $longitude);
 		
 		$result = $this->model->saveData($activity_data);
 		
@@ -157,8 +218,8 @@ class Mobile_activity extends BaseController
 				$result['id_activity'],
 				$data_array['id_patrol'],
 				$data_array['barcode_scanned'] ?? '',
-				$data_array['location']['coords']['latitude'] ?? null,
-				$data_array['location']['coords']['longitude'] ?? null
+				$latitude,
+				$longitude
 			);
 		}
 		

@@ -68,7 +68,7 @@
 		</script>
 		<?php endif; ?>
 		<?php echo form_open($module_url . '/store', ['class' => 'form-user-company']); ?>
-			<?php echo form_hidden('id', @$assignment->id_user_company); ?>
+			<?php echo form_hidden('id', @$assignment->id_user_company ?? ''); ?>
 			
 			<div class="row mb-3">
 				<label class="col-sm-3 col-md-2 col-lg-3 col-xl-2 col-form-label fw-semibold text-dark">Pilih Pegawai <span class="text-primary fw-bold">*</span></label>

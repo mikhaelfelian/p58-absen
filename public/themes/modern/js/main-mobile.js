@@ -882,6 +882,9 @@ function initPatrolFunctionality() {
 	let patrolOptions = [];
 	let currentStep = 1;
 	let scannedPatrolData = null;
+	let activityCameraStream = null;
+	let activityCameraFacingMode = 'environment'; // 'environment' or 'user'
+	let activityPhotos = []; // Array to store multiple photos
 	
 	// Load patrol points when company is detected
 	window.addEventListener('companyDetected', function(event) {
@@ -1086,12 +1089,20 @@ function initPatrolFunctionality() {
 	function onScanSuccess(decodedText, decodedResult) {
 		console.log(`QR Code detected: ${decodedText}`);
 		
-		// Stop scanner
-		qrScanner.stop().then(() => {
-			qrScanner.clear();
-		}).catch(err => {
-			console.log("Error stopping scanner after success", err);
-		});
+		// Stop scanner safely - wrapped in try-catch for safety
+		try {
+			if (qrScanner && qrScanner.isScanning && qrScanner.isScanning()) {
+				qrScanner.stop().then(() => {
+					try {
+						qrScanner.clear();
+					} catch(e) {}
+				}).catch(err => {
+					// Silently ignore - scanner already stopped
+				});
+			}
+		} catch(e) {
+			// Silently ignore
+		}
 		
 		// For testing: Auto-proceed to step 2 without validation
 		// Store the scanned barcode
@@ -1115,6 +1126,20 @@ function initPatrolFunctionality() {
 			showConfirmButton: false
 		}).then(() => {
 			// Close modal and proceed to step 2
+			// Stop scanner before closing modal
+			try {
+				if (qrScanner && qrScanner.isScanning && qrScanner.isScanning()) {
+					qrScanner.stop().then(() => {
+						try {
+							qrScanner.clear();
+						} catch(e) {}
+					}).catch(err => {
+						// Silently ignore
+					});
+				}
+			} catch(e) {
+				// Silently ignore
+			}
 			$('#qrScannerModal').modal('hide');
 			showStep(2);
 		});
@@ -1184,14 +1209,21 @@ function initPatrolFunctionality() {
 	
 	// Close modal and stop scanner
 	$('#qrScannerModal').on('hidden.bs.modal', function() {
-		if (qrScanner) {
-			qrScanner.stop().then(() => {
-				qrScanner.clear();
-				qrScanner = null; // Reset scanner instance
-			}).catch(err => {
-				console.log("Error stopping scanner", err);
-				qrScanner = null; // Reset even if stop fails
-			});
+		try {
+			if (qrScanner && qrScanner.isScanning && qrScanner.isScanning()) {
+				qrScanner.stop().then(() => {
+					try {
+						qrScanner.clear();
+					} catch(e) {}
+					qrScanner = null;
+				}).catch(err => {
+					qrScanner = null;
+				});
+			} else {
+				qrScanner = null;
+			}
+		} catch(e) {
+			qrScanner = null;
 		}
 		$('#qr-scanning-status').show();
 		$('#qr-result').hide();
@@ -1212,12 +1244,19 @@ function initPatrolFunctionality() {
 		const deskripsi_activity = $('#deskripsi_activity').val();
 		const foto = $('#foto_activity').val();
 		
+		// Get patrol requirement status from nearest company
+		let isPatrolRequired = false;
+		if (window.nearestCompany && window.nearestCompany.isPatrolRequired === 1) {
+			isPatrolRequired = true;
+		}
+		
 		if (!id_company) {
 			Swal.fire('Error', 'Lokasi company tidak valid', 'error');
 			return;
 		}
 		
-		if (!id_patrol) {
+		// Only require patrol if it's mandatory
+		if (isPatrolRequired && !id_patrol) {
 			Swal.fire('Error', 'Titik patroli harus dipilih', 'error');
 			return;
 		}
@@ -1232,6 +1271,24 @@ function initPatrolFunctionality() {
 			return;
 		}
 		
+		// Disable button and show loading
+		$('#btn-save-activity').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Mengambil GPS...');
+		
+		// Get fresh GPS location before saving
+		getGPSLocation()
+			.then(location => {
+				// Save with fresh GPS location
+				performSaveActivity(id_company, id_patrol, scanned_barcode, judul_activity, deskripsi_activity, foto, location);
+			})
+			.catch(err => {
+				console.warn('GPS Error, using cached location:', err);
+				// Use cached location if GPS fails
+				performSaveActivity(id_company, id_patrol, scanned_barcode, judul_activity, deskripsi_activity, foto, currentLocation);
+			});
+	}
+	
+	// Perform actual save with location
+	function performSaveActivity(id_company, id_patrol, scanned_barcode, judul_activity, deskripsi_activity, foto, location) {
 		const data = {
 			id_company: id_company,
 			id_patrol: id_patrol,
@@ -1239,12 +1296,12 @@ function initPatrolFunctionality() {
 			judul_activity: judul_activity,
 			deskripsi_activity: deskripsi_activity,
 			foto: foto,
-			location: currentLocation
+			location: location
 		};
 		
 		const data_encoded = btoa(JSON.stringify(data));
 		
-		$('#btn-save-activity').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...');
+		$('#btn-save-activity').html('<i class="fas fa-spinner fa-spin me-2"></i>Menyimpan...');
 		
 		$.ajax({
 			url: base_url + 'mobile-activity/ajaxSaveActivity',
@@ -1276,6 +1333,224 @@ function initPatrolFunctionality() {
 		});
 	}
 	
+	// Camera switch functionality
+	$('#btn-switch-camera').click(function() {
+		switchActivityCamera();
+	});
+	
+	// Function to switch between front and back camera
+	async function switchActivityCamera() {
+		// Toggle facing mode
+		activityCameraFacingMode = activityCameraFacingMode === 'environment' ? 'user' : 'environment';
+		
+		// Stop current stream
+		if (activityCameraStream) {
+			activityCameraStream.getTracks().forEach(track => track.stop());
+		}
+		
+		// Start new stream with switched camera
+		await startActivityCamera();
+	}
+	
+	// Function to start camera for activity
+	async function startActivityCamera() {
+		try {
+			const constraints = {
+				video: {
+					facingMode: activityCameraFacingMode
+				}
+			};
+			
+			const stream = await navigator.mediaDevices.getUserMedia(constraints);
+			activityCameraStream = stream;
+			
+			const video = document.getElementById('my_camera');
+			if (video) {
+				video.srcObject = stream;
+				video.play();
+			}
+		} catch (err) {
+			console.error('Error accessing camera:', err);
+			Swal.fire('Error', 'Tidak dapat mengakses kamera. Pastikan izin kamera diberikan.', 'error');
+		}
+	}
+	
+	// Stop camera stream
+	function stopActivityCamera() {
+		if (activityCameraStream) {
+			activityCameraStream.getTracks().forEach(track => track.stop());
+			activityCameraStream = null;
+		}
+	}
+	
+	// Handle camera button clicks
+	$('#btn-open-camera').click(function() {
+		$('#camera-container').show();
+		$('#btn-open-camera').hide();
+		startActivityCamera();
+	});
+	
+	$('#btn-capture').click(function() {
+		const button = $('#btn-capture');
+		
+		// Show loading while getting GPS
+		button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Mengambil Lokasi GPS...');
+		
+		// Request fresh GPS location
+		getGPSLocation()
+			.then(location => {
+				capturePhotoWithLocation(location);
+				button.prop('disabled', false).html('<i class="fas fa-camera me-2"></i>Ambil Foto');
+			})
+			.catch(err => {
+				console.error('GPS Error:', err);
+				// Use cached location if GPS fails
+				capturePhotoWithLocation(currentLocation);
+				button.prop('disabled', false).html('<i class="fas fa-camera me-2"></i>Ambil Foto');
+			});
+	});
+	
+	// Function to get GPS location
+	function getGPSLocation() {
+		return new Promise((resolve, reject) => {
+			if (!navigator.geolocation) {
+				reject(new Error('GPS tidak tersedia'));
+				return;
+			}
+			
+			const options = {
+				enableHighAccuracy: true,
+				timeout: 10000,
+				maximumAge: 0
+			};
+			
+			navigator.geolocation.getCurrentPosition(
+				position => {
+					const location = {
+						lat: position.coords.latitude,
+						lng: position.coords.longitude,
+						accuracy: position.coords.accuracy
+					};
+					currentLocation = location;
+					resolve(location);
+				},
+				error => {
+					reject(error);
+				},
+				options
+			);
+		});
+	}
+	
+	// Function to capture photo with GPS location
+	function capturePhotoWithLocation(location) {
+		const video = document.getElementById('my_camera');
+		const canvas = document.createElement('canvas');
+		canvas.width = video.videoWidth;
+		canvas.height = video.videoHeight;
+		
+		const ctx = canvas.getContext('2d');
+		ctx.drawImage(video, 0, 0);
+		
+		const imageData = canvas.toDataURL('image/jpeg');
+		
+		// Get location
+		let lat = location && location.lat ? location.lat : null;
+		let lon = location && location.lng ? location.lng : null;
+		
+		// Create photo object
+		const photoData = {
+			file_name: 'photo_' + Date.now() + '.jpg',
+			image: imageData,
+			lat: lat,
+			lon: lon
+		};
+		
+		// Add to photos array
+		activityPhotos.push(photoData);
+		
+		// Update hidden field with JSON
+		$('#foto_activity').val(JSON.stringify(activityPhotos));
+		
+		// Show photo in preview
+		addPhotoToPreview(photoData, activityPhotos.length - 1);
+		
+		// Stop camera and hide camera container
+		stopActivityCamera();
+		$('#camera-container').hide();
+		
+		// Show "Buka Kamera" button again for taking more photos
+		$('#btn-open-camera').show();
+		$('#btn-open-camera').html('<i class="fas fa-camera me-2"></i>Ambil Foto Lagi');
+		
+		// Show photos preview
+		$('#photos-preview-container').show();
+	}
+	
+	// Function to pause camera (keep stream alive)
+	function pauseActivityCamera() {
+		const video = document.getElementById('my_camera');
+		if (video && activityCameraStream) {
+			video.pause();
+			// Keep the stream alive but pause video
+		}
+	}
+	
+	// Function to resume camera
+	function resumeActivityCamera() {
+		const video = document.getElementById('my_camera');
+		if (video && activityCameraStream) {
+			video.play();
+		}
+	}
+	
+	// Add photo to preview
+	function addPhotoToPreview(photoData, index) {
+		const photoHtml = `
+			<div class="photo-item mb-2" data-index="${index}">
+				<div class="card">
+					<div class="card-body p-2">
+						<div class="row align-items-center">
+							<div class="col-3">
+								<img src="${photoData.image}" class="img-fluid rounded" alt="Photo ${index + 1}">
+							</div>
+							<div class="col-6">
+								<small class="text-muted d-block">${photoData.file_name}</small>
+								<small class="text-muted d-block">Lat: ${photoData.lat || 'N/A'}</small>
+								<small class="text-muted d-block">Lon: ${photoData.lon || 'N/A'}</small>
+							</div>
+							<div class="col-3 text-end">
+								<button type="button" class="btn btn-danger btn-sm remove-photo" data-index="${index}">
+									<i class="fas fa-trash"></i>
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		`;
+		
+		$('#photos-preview-container').append(photoHtml);
+		
+		// Handle remove button
+		$('#photos-preview-container .remove-photo').off('click').on('click', function() {
+			const indexToRemove = $(this).data('index');
+			activityPhotos.splice(indexToRemove, 1);
+			$('#foto_activity').val(JSON.stringify(activityPhotos));
+			
+			// Rebuild preview
+			$('#photos-preview-container').empty();
+			activityPhotos.forEach(function(photo, idx) {
+				addPhotoToPreview(photo, idx);
+			});
+			
+			// Update button text if no photos
+			if (activityPhotos.length === 0) {
+				$('#btn-open-camera').html('<i class="fas fa-camera me-2"></i>Buka Kamera');
+			}
+		});
+	}
+	
 	// Reset form
 	function resetForm() {
 		$('#form-activity')[0].reset();
@@ -1283,8 +1558,12 @@ function initPatrolFunctionality() {
 		$('#id_patrol').val('');
 		$('#scanned_barcode').val('');
 		scannedPatrolData = null;
-		$('#preview-container').hide();
+		$('#photos-preview-container').empty();
+		activityPhotos = [];
 		$('#camera-container').hide();
+		$('#btn-open-camera').show();
+		$('#btn-open-camera').html('<i class="fas fa-camera me-2"></i>Buka Kamera');
 		$('#foto_activity').val('');
+		stopActivityCamera();
 	}
 }
