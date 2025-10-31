@@ -172,6 +172,8 @@ function updateCircleFast() {
 //=============== FAST: Setting Map ===============//
 function initSettingMap() {
 	if (typeof L === 'undefined') return;
+	// Check if map container exists
+	if ($('#map-setting').length === 0) return;
 	const $lat = $('#setting-latitude'), $lng = $('#setting-longitude'),
 		  $rad = $('#setting-radius-nilai'), $unit = $('#setting-radius-satuan');
 	let lat = parseFloat($lat.val()) || -7.797068,
@@ -214,16 +216,20 @@ function updateSettingCircleFast() {
 }
 
 //=============== FAST: Toggle radius location ===============//
-$('#gunakan-radius-lokasi').on('change', function() {
-	let v = $(this).val();
-	if (v === 'Y') {
-		$('#row-radius-lokasi-setting').show();
-		if (!mapSetting) setTimeout(initSettingMap,20);
-	} else {
-		$('#row-radius-lokasi-setting').hide();
+$(function() {
+	$('#gunakan-radius-lokasi').on('change', function() {
+		let v = $(this).val();
+		if (v === 'Y') {
+			$('#row-radius-lokasi-setting').show();
+			if (!mapSetting && $('#map-setting').length > 0) setTimeout(initSettingMap,20);
+		} else {
+			$('#row-radius-lokasi-setting').hide();
+		}
+	});
+	if ($('#gunakan-radius-lokasi').length > 0 && $('#gunakan-radius-lokasi').val() === 'Y' && $('#map-setting').length > 0) {
+		initSettingMap();
 	}
 });
-if ($('#gunakan-radius-lokasi').val() === 'Y') initSettingMap();
 
 // Patrol Points Management
 var patrolCounter = 0;
