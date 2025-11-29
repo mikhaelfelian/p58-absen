@@ -2,50 +2,33 @@ name: Deploy to Development
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v3
 
-    # FIX 1: Matikan normalisasi CRLF/BOM (WAJIB)
-    - name: Disable Git EOL & Encoding Conversion
-      run: |
-        git config --global core.autocrlf false
-        git config --global core.safecrlf false
-        git config --global core.eol lf
-        git config --global core.filemode false
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-    # FIX 2: Checkout repo tanpa modifikasi file
-    - name: Checkout Repository
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-        lfs: false
+      - name: Deploy to cPanel
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            cd ${{ secrets.DEPLOY_PATH_DEV }} &&
+            
+            # update repo
+            git fetch --all &&
+            git reset --hard origin/main &&
 
-    - name: Setup SSH Connection
-      uses: webfactory/ssh-agent@v0.5.3
-      with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+            # permissions required only by CI
+            chmod -R 775 writable &&
+            chmod 644 *.php ||
+            true
 
-    - name: Deploy Code to cPanel
-      run: |
-        ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-          cd ${{ secrets.DEPLOY_PATH_DEV }} &&
-
-          # FIX 3: Fetch only updated files from origin/main
-          git fetch origin main &&
-          git reset --hard FETCH_HEAD &&
-
-          # FIX 4: Permission aman untuk CI4 custom
-          find . -type d -exec chmod 755 {} \; &&
-          find app -type f -exec chmod 664 {} \; &&
-          find system -type f -exec chmod 664 {} \; &&
-          find public -type f -exec chmod 644 {} \; &&
-          chmod -R 775 writable &&
-
-          exit
-        "
+            exit
+          "
