@@ -1,0 +1,45 @@
+name: Deploy App Update Only
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Create app-update.zip
+        run: zip -r app-update.zip app
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # FIX WAJIB UNTUK HOST KEY VERIFICATION FAILED
+      - name: Add host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload ZIP to Server
+        run: |
+          scp -P ${{ secrets.SSH_PORT }} app-update.zip \
+          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH_DEV }}
+
+      - name: Extract & Deploy update
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no \
+          ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            cd ${{ secrets.DEPLOY_PATH_DEV }} &&
+            unzip -o app.zip &&
+            rm app.zip &&
+            chmod -R 775 writable &&
+            exit
+          "
