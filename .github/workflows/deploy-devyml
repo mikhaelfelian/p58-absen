@@ -1,0 +1,34 @@
+name: Deploy to Development
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to cPanel 
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            cd ${{ secrets.DEPLOY_PATH_DEV }} &&
+            
+            # update repo
+            git fetch --all &&
+            git reset --hard origin/main &&
+
+            # permissions required only by CI
+            chmod -R 775 writable &&
+            chmod 644 *.php ||
+            true
+
+            exit
+          "
