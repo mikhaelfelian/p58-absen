@@ -96,7 +96,11 @@
 				<div class="row mb-0 mt-4">
 					<div class="col-sm-8">
 						<p class="fst-italic mb-0 mt-3">
-							<strong>Keterangan:</strong> V = Tepat Waktu, TL = Terlambat Masuk, PSW = Pulang Sebelum Waktunya, TAM = Tidak Absen Masuk, TAP = Tidak Absen Pulang
+							<strong>Keterangan:</strong> 
+							<span class="text-success fw-semibold">V</span> = Masuk (hadir valid),
+							<span class="text-warning fw-semibold">PSW</span> = Pulang Sebelum Waktunya,
+							<span class="text-danger fw-semibold">TAM</span> = Tidak Absen Masuk,
+							<span class="text-danger fw-semibold">TAP</span> = Tidak Absen Pulang
 						</p>
 					</div>
 					<div class="col-sm-4">
@@ -142,46 +146,34 @@
 								for ($i = 1; $i <= $num_day; $i++) {
 									$curr_time = strtotime($_GET['tahun'] . '-' . $_GET['bulan'] . '-' . substr('0' . $i, -2));
 									$curr_day = date('w', $curr_time);
-									
-									if (in_array($curr_day, $hari_kerja)) {
-										if (key_exists($i, $absen_user)) {
-											switch ($absen_user[$i]) {
-												case 'tam':
-													echo '<td class="bg-danger-subtle text-center">TAM</td>';
-													break;
-												case 'tam_psw':
-													echo '<td class="bg-danger-subtle text-center">TAM,PSW</td>';
-													break;
-												case 'tap':
-													echo '<td class="bg-danger-subtle text-center">TAP</td>';
-													break;
-												case 'tl_tap':
-													echo '<td class="bg-danger-subtle text-center">TL,TAP</td>';
-													break;
-												case 'tam_tap':
-													echo '<td class="bg-danger-subtle text-center">TAM,TAP</td>';
-													break;
-												case 'tw':
-													echo '<td class="bg-success-subtle text-center">V</td>';
-													break;
-												case 'tl':
-													echo '<td class="bg-warning-subtle text-center">TL</td>';
-													break;
-												case 'psw':
-													echo '<td class="bg-warning-subtle text-center">PSW</td>';
-													break;
-												case 'tl_psw':
-													echo '<td class="bg-warning-subtle text-center">TL,PSW</td>';
-													break;
-												default:
-													echo '<td class="text-center">-</td>';
-													break;
-											}
-										} else {
-											echo '<td class="bg-danger text-center">TA</td>';
+									$is_working_day = in_array($curr_day, $hari_kerja);
+
+									// If there is presensi data for the day, always show status
+									if (key_exists($i, $absen_user)) {
+										switch ($absen_user[$i]) {
+											case 'tam':
+												echo '<td class="bg-danger-subtle text-center">TAM</td>';
+												break;
+											case 'tap':
+												echo '<td class="bg-danger-subtle text-center">TAP</td>';
+												break;
+											case 'v':
+												echo '<td class="bg-success-subtle text-center">V</td>';
+												break;
+											case 'psw':
+												echo '<td class="bg-warning-subtle text-center">PSW</td>';
+												break;
+											default:
+												echo '<td class="text-center">-</td>';
+												break;
 										}
 									} else {
-										echo '<td class="bg-light text-center"></td>';
+										// No presensi on working day -> TAM, non-working day -> empty
+										if ($is_working_day) {
+											echo '<td class="bg-danger text-center text-white">TAM</td>';
+										} else {
+											echo '<td class="bg-light text-center"></td>';
+										}
 									}
 								}
 								

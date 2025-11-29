@@ -19,7 +19,7 @@
 				</div>
 				<div class="card-body">
 					<?php 
-					$today_stats = $stats_tahun['today_attendance'] ?? [];
+					$today_stats = $stats_tahun['current_attendance'] ?? [];
 					$has_entry = !empty($today_stats);
 					?>
 					
@@ -47,8 +47,7 @@
 								<div class="alert <?=$masuk_done ? 'alert-success' : 'alert-warning'?>">
 									<strong>Presensi Masuk</strong><br>
 									<?php if ($masuk_done): ?>
-										Waktu: <?=$masuk_waktu?><br>
-										Batas: <?=$masuk_batas?>
+										Waktu: <?=$masuk_waktu?>
 									<?php else: ?>
 										Belum absen masuk
 									<?php endif; ?>
@@ -59,8 +58,7 @@
 								<div class="alert <?=$pulang_done ? 'alert-success' : 'alert-warning'?>">
 									<strong>Presensi Pulang</strong><br>
 									<?php if ($pulang_done): ?>
-										Waktu: <?=$pulang_waktu?><br>
-										Batas: <?=$pulang_batas?>
+										Waktu: <?=$pulang_waktu?>
 									<?php else: ?>
 										Belum absen pulang
 									<?php endif; ?>
@@ -81,11 +79,11 @@
 		<?php 
 		$stats = $stats_tahun['stats'] ?? [];
 		$total_presensi = $stats['total_presensi'] ?? 0;
-		$tepat_waktu = $stats['tepat_waktu'] ?? 0;
-		$terlambat = $stats['terlambat'] ?? 0;
+		$masuk_count = $stats['masuk'] ?? 0;
+		$pulang_count = $stats['pulang'] ?? 0;
 		?>
 		
-		<div class="col-lg-3 col-sm-6 mb-4">
+		<div class="col-lg-4 col-sm-6 mb-4">
 			<div class="card text-white bg-primary shadow">
 				<div class="card-body">
 					<h5 class="card-title h3"><?=$total_presensi?></h5>
@@ -94,33 +92,20 @@
 			</div>
 		</div>
 		
-		<div class="col-lg-3 col-sm-6 mb-4">
+		<div class="col-lg-4 col-sm-6 mb-4">
 			<div class="card text-white bg-success shadow">
 				<div class="card-body">
-					<h5 class="card-title h3"><?=$tepat_waktu?></h5>
-					<p class="card-text">Tepat Waktu</p>
+					<h5 class="card-title h3"><?=$masuk_count?></h5>
+					<p class="card-text">Total Masuk</p>
 				</div>
 			</div>
 		</div>
 		
-		<div class="col-lg-3 col-sm-6 mb-4">
-			<div class="card text-white bg-warning shadow">
-				<div class="card-body">
-					<h5 class="card-title h3"><?=$terlambat?></h5>
-					<p class="card-text">Terlambat</p>
-				</div>
-			</div>
-		</div>
-		
-		<div class="col-lg-3 col-sm-6 mb-4">
+		<div class="col-lg-4 col-sm-6 mb-4">
 			<div class="card text-white bg-info shadow">
 				<div class="card-body">
-					<?php 
-					$masuk_count = $stats['masuk'] ?? 0;
-					$pulang_count = $stats['pulang'] ?? 0;
-					?>
-					<h5 class="card-title h3"><?=$masuk_count?>/<?=$pulang_count?></h5>
-					<p class="card-text">Masuk / Pulang</p>
+					<h5 class="card-title h3"><?=$pulang_count?></h5>
+					<p class="card-text">Total Pulang</p>
 				</div>
 			</div>
 		</div>
@@ -159,13 +144,19 @@
 										<td><?=$recent['waktu']?></td>
 										<td>
 											<?php
+											// Simplified status: only show "Masuk" or "Pulang Belum Waktu"
 											$status = '';
-											if ($recent['jenis_presensi'] == 'masuk' && $recent['waktu'] > $recent['batas_waktu_presensi']) {
-												$status = '<span class="badge bg-warning">Terlambat</span>';
-											} elseif ($recent['jenis_presensi'] == 'pulang' && $recent['waktu'] < $recent['batas_waktu_presensi']) {
-												$status = '<span class="badge bg-warning">Pulang Awal</span>';
+											if ($recent['jenis_presensi'] == 'masuk') {
+												$status = '<span class="badge bg-success">Masuk</span>';
+											} elseif ($recent['jenis_presensi'] == 'pulang') {
+												// Show "Pulang Belum Waktu" if is_valid is 0, otherwise just "Pulang"
+												if (isset($recent['is_valid']) && $recent['is_valid'] == 0) {
+													$status = '<span class="badge bg-warning">Pulang Belum Waktu</span>';
+												} else {
+													$status = '<span class="badge bg-info">Pulang</span>';
+												}
 											} else {
-												$status = '<span class="badge bg-success">Tepat Waktu</span>';
+												$status = '<span class="badge bg-secondary">-</span>';
 											}
 											echo $status;
 											?>

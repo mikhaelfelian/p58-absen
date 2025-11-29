@@ -893,10 +893,15 @@ $(document).ready(function() {
 					}
 					// Update waktu presensi if btn_clicked is set
 					if (btn_clicked && btn_clicked !== '') {
-					$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
+						$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
 					}
 					toast_mobile('<i class="bi bi-check-circle me-2"></i>Data berhasil disimpan');
-					$('.nav-footer-home').click();
+
+					// Refresh presensi buttons and history sections via AJAX
+					// Beri sedikit jeda agar user sempat melihat toast
+					setTimeout(function() {
+						refreshPresensiSections();
+					}, 800);
 					/* let $bootbox_timer = bootbox.dialog({
 						message: '<div class="text-center mt-4 mb-4"><div class="mb-2 fs-1 text-success"><i class="far fa-circle-check"></i></div><p class="mb-4">Data presensi ' + data.data.jenis_presensi + ' berhasil disimpan</p></div>',
 						closeButton: false
@@ -935,6 +940,60 @@ $(document).ready(function() {
 				console.log(xhr);
 			}
 		})
+	}
+	
+	/**
+	 * Refresh presensi buttons and history sections via AJAX
+	 * Replaces full page reload with partial refresh for better UX
+	 */
+	function refreshPresensiSections() {
+		// Show loading indicators
+		var $buttonsContainer = $('#presensi-buttons-container');
+		var $historyContainer = $('#presensi-history-container');
+		
+		if ($buttonsContainer.length) {
+			$buttonsContainer.html('<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Memuat...</span></div></div>');
+		}
+		
+		if ($historyContainer.length) {
+			$historyContainer.html('<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Memuat...</span></div></div>');
+		}
+		
+		// Fetch updated sections
+		$.ajax({
+			url: base_url + 'mobile-presensi-home/ajaxRefreshSections',
+			type: 'get',
+			success: function(response) {
+				try {
+					var data = typeof response === 'string' ? JSON.parse(response) : response;
+					
+					if (data.status === 'ok') {
+						// Update buttons section
+						if ($buttonsContainer.length && data.buttons_html) {
+							$buttonsContainer.html(data.buttons_html);
+						}
+						
+						// Update history section
+						if ($historyContainer.length && data.history_html) {
+							$historyContainer.html(data.history_html);
+						}
+					} else {
+						console.error('Failed to refresh sections:', data);
+						// Fallback to full reload on error
+						window.location.reload();
+					}
+				} catch (e) {
+					console.error('Error parsing refresh response:', e);
+					// Fallback to full reload on error
+					window.location.reload();
+				}
+			},
+			error: function(xhr, status, error) {
+				console.error('AJAX error refreshing sections:', error);
+				// Fallback to full reload on error
+				window.location.reload();
+			}
+		});
 	}
 	
 	$('#user-menu-nav-header').click(function() {
@@ -1088,6 +1147,11 @@ function initPatrolFunctionality() {
 	let activityCameraFacingMode = 'environment'; // 'environment' or 'user'
 	let activityPhotos = []; // Array to store multiple photos
 	let nextPatrolInfo = null;
+	
+	// Debouncing for QR code scanning (prevent multiple rapid scans)
+	let lastScannedCode = null;
+	let lastScanTime = 0;
+	const QR_SCAN_DEBOUNCE_MS = 2000; // Ignore same QR code for 2 seconds
 	const stepperPills = $('#activity-stepper .step-pill');
 	const qrInlineWrapper = $('#qr-inline-wrapper');
 	const qrModalPlaceholder = $('#qr-modal-placeholder');
@@ -1104,6 +1168,12 @@ function initPatrolFunctionality() {
 	let flashMode = 'auto';
 	let torchSupported = false;
 	let cameraVideoTrack = null;
+	
+	// QR Scanner flash control
+	const qrFlashControlWrapper = $('#qr-flash-control-wrapper');
+	let qrFlashMode = 'auto';
+	let qrTorchSupported = false;
+	let qrCameraVideoTrack = null;
 	let lastSuccessfulFacingMode = activityCameraFacingMode;
 	let accordionCollapsedByCamera = false;
 	let wasAccordionOpenBeforeCamera = false;
@@ -1224,6 +1294,75 @@ function initPatrolFunctionality() {
 			console.warn('Failed to set torch:', err);
 			Swal.fire('Info', 'Tidak dapat mengubah lampu di perangkat ini.', 'info');
 		});
+	}
+	
+	// QR Scanner Flash Control Functions
+	function hideQRFlashControl(message) {
+		if (!qrFlashControlWrapper.length) {
+			return;
+		}
+		qrFlashControlWrapper.hide();
+		if (message) {
+			$('#qr-flash-support-text').text(message);
+		}
+	}
+	
+	function setupQRScannerFlashControl() {
+		if (!qrFlashControlWrapper.length || !qrCameraVideoTrack) {
+			return;
+		}
+		const capabilities = qrCameraVideoTrack.getCapabilities ? qrCameraVideoTrack.getCapabilities() : {};
+		qrTorchSupported = !!capabilities.torch;
+		if (!qrTorchSupported) {
+			hideQRFlashControl('Lampu tidak tersedia di perangkat ini.');
+			return;
+		}
+		qrFlashControlWrapper.show();
+		$('#qr-flash-support-text').text('Sesuaikan lampu saat memindai QR code.');
+		updateQRScannerFlashButtons();
+		applyQRScannerFlashMode(qrFlashMode);
+	}
+	
+	function updateQRScannerFlashButtons() {
+		if (!qrFlashControlWrapper.length) {
+			return;
+		}
+		qrFlashControlWrapper.find('.flash-toggle-qr').removeClass('active');
+		qrFlashControlWrapper.find(`.flash-toggle-qr[data-flash-mode="${qrFlashMode}"]`).addClass('active');
+	}
+	
+	function applyQRScannerFlashMode(mode) {
+		if (!qrCameraVideoTrack || !qrTorchSupported) {
+			return;
+		}
+		if (mode === 'auto') {
+			qrCameraVideoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
+			return;
+		}
+		const torchOn = mode === 'on';
+		qrCameraVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(err => {
+			console.warn('Failed to set QR scanner torch:', err);
+		});
+	}
+	
+	function getQRScannerVideoTrack() {
+		if (!qrScanner) {
+			return null;
+		}
+		// Try to get video track from qr-reader element
+		const qrReaderElement = document.getElementById('qr-reader');
+		if (!qrReaderElement) {
+			return null;
+		}
+		const video = qrReaderElement.querySelector('video');
+		if (!video || !video.srcObject) {
+			return null;
+		}
+		const stream = video.srcObject;
+		if (!stream || !stream.getVideoTracks || stream.getVideoTracks().length === 0) {
+			return null;
+		}
+		return stream.getVideoTracks()[0];
 	}
 	
 	function storePatrolOptionsForCompany(companyId, patrols) {
@@ -1629,6 +1768,11 @@ function initPatrolFunctionality() {
 	function stopQRScanner() {
 		return new Promise(resolve => {
 			try {
+				// Reset QR flash control
+				qrCameraVideoTrack = null;
+				qrTorchSupported = false;
+				hideQRFlashControl();
+				
 				if (!qrScanner) {
 					resolve();
 					return;
@@ -1661,6 +1805,11 @@ function initPatrolFunctionality() {
 	function resetQrInlineStatus() {
 		$('#qr-result').hide();
 		$('#qr-scanning-status').html(defaultQrStatusHtml);
+		// Reset flash control
+		qrFlashMode = 'auto';
+		qrCameraVideoTrack = null;
+		qrTorchSupported = false;
+		hideQRFlashControl();
 	}
 
 	function ensureInlineScanner(forceRestart = false) {
@@ -1680,6 +1829,9 @@ function initPatrolFunctionality() {
 			startQRScanner();
 		}
 	}
+	
+	// Make ensureInlineScanner globally accessible for mobile-activity.js
+	window.ensureInlineScanner = ensureInlineScanner;
 
 	function moveScannerToModal() {
 		if (!qrInlineWrapper.length || !qrModalPlaceholder.length) {
@@ -2028,6 +2180,21 @@ function initPatrolFunctionality() {
 		applyFlashMode(mode);
 	});
 	
+	// QR Scanner flash control button handlers
+	$(document).on('click', '.flash-toggle-qr', function() {
+		const mode = $(this).data('flash-mode');
+		if (!mode) {
+			return;
+		}
+		if (!qrTorchSupported) {
+			Swal.fire('Info', 'Lampu tidak tersedia di perangkat ini.', 'info');
+			return;
+		}
+		qrFlashMode = mode;
+		updateQRScannerFlashButtons();
+		applyQRScannerFlashMode(mode);
+	});
+	
 	function updateCameraStatus(message, variant = 'info') {
 		if (!cameraStatusText.length) {
 			return;
@@ -2329,24 +2496,32 @@ function initPatrolFunctionality() {
 				wrappedOnScanSuccess,
 				wrappedOnScanFailure
 			).then(() => {
-				// Hide loading, show scanning message
+				// Hide loading, show scanning message (WhatsApp Web style - continuous scanning)
 				$('#qr-scanning-status').html(`
-					<div class="alert alert-success">
-						<i class="fas fa-camera me-2"></i>
-						<strong>Kamera aktif!</strong>
+					<div class="alert alert-info">
+						<i class="fas fa-qrcode me-2"></i>
+						<strong>Memindai QR Code...</strong>
 						<br>
-						<small>Arahkan kamera ke QR code patrol</small>
-						<br>
-						<small class="text-muted">Klik tombol di bawah untuk capture QR code</small>
-					</div>
-					<div class="text-center mt-2">
-					<!--
-						<button type="button" class="btn btn-warning btn-sm" id="btn-manual-capture-qr">
-							<i class="fas fa-camera me-2"></i>Capture QR Code
-						</button>
-						-->
+						<small>Arahkan kamera ke QR code patrol. QR code akan terdeteksi otomatis.</small>
 					</div>
 				`);
+				
+				// Setup flash control for QR scanner
+				// Retry mechanism to get video track (may not be immediately available)
+				let retryCount = 0;
+				const maxRetries = 5;
+				const setupFlashRetry = setInterval(() => {
+					qrCameraVideoTrack = getQRScannerVideoTrack();
+					if (qrCameraVideoTrack) {
+						setupQRScannerFlashControl();
+						clearInterval(setupFlashRetry);
+					} else {
+						retryCount++;
+						if (retryCount >= maxRetries) {
+							clearInterval(setupFlashRetry);
+						}
+					}
+				}, 300); // Check every 300ms, up to 5 times
 				
 				// Add manual capture button handler
 				$('#btn-manual-capture-qr').off('click').on('click', function() {
@@ -2628,6 +2803,17 @@ function initPatrolFunctionality() {
 	
 	// QR scan success
 	function onScanSuccess(decodedText, decodedResult) {
+		// Debouncing: Prevent multiple rapid scans of the same QR code
+		const now = Date.now();
+		if (lastScannedCode === decodedText && (now - lastScanTime) < QR_SCAN_DEBOUNCE_MS) {
+			// Same QR code scanned too soon, ignore
+			return;
+		}
+		
+		// Update debounce tracking
+		lastScannedCode = decodedText;
+		lastScanTime = now;
+		
 		// Show immediate feedback
 		$('#qr-scanning-status').html(`
 			<div class="alert alert-warning">
@@ -2638,25 +2824,33 @@ function initPatrolFunctionality() {
 			</div>
 		`);
 		
-		// Stop scanner safely - wrapped in try-catch for safety
+		// Stop scanner temporarily to process the QR code
+		// Then restart it automatically (like WhatsApp Web) for continuous scanning
 		try {
 			if (qrScanner && qrScanner.isScanning && qrScanner.isScanning()) {
 				qrScanner.stop().then(() => {
-					try {
-						qrScanner.clear();
-					} catch(e) {
-						// Error clearing scanner - silently fail
-					}
+					// Handle detection on client-side
+					handlePatrolDetection(decodedText);
+					
+					// Auto-restart scanner after a short delay for continuous scanning (WhatsApp Web style)
+					setTimeout(() => {
+						// Only restart if we're still on step 1 and scanner is not running
+						if (currentStep === 1 && !isScannerRunning()) {
+							startQRScanner();
+						}
+					}, 1000);
 				}).catch(err => {
-					// Error stopping scanner - silently fail
+					// Error stopping scanner - still process the detection
+					handlePatrolDetection(decodedText);
 				});
+			} else {
+				// Scanner not running, just handle detection
+				handlePatrolDetection(decodedText);
 			}
 		} catch(e) {
-			// Error in scanner stop - silently fail
+			// Error in scanner stop - still process the detection
+			handlePatrolDetection(decodedText);
 		}
-		
-		// Handle detection on client-side
-		handlePatrolDetection(decodedText);
 	}
 	
 	// QR scan failure
@@ -2816,6 +3010,10 @@ function initPatrolFunctionality() {
 		markPatrolAsScanned(matchedPatrol.id_patrol);
 		setNextPatrolInfo(getNextPendingPatrol());
 		
+		// Reset debounce tracking after successful scan
+		lastScannedCode = null;
+		lastScanTime = 0;
+		
 		setTimeout(() => {
 			showStep(2);
 			// Ensure text is a string
@@ -2894,12 +3092,17 @@ function initPatrolFunctionality() {
 		// Get fresh GPS location before saving
 		getGPSLocation()
 			.then(location => {
+				// Reset error flag on successful GPS
+				gpsErrorShown = false;
+				gpsErrorShownTime = 0;
 				// Save with fresh GPS location
 				performSaveActivity(id_company, id_patrol, scanned_barcode, judul_activity, deskripsi_activity, foto, location);
 			})
 			.catch(err => {
 				console.warn('GPS Error, using cached location:', err);
-				// Use cached location if GPS fails
+				// Use cached location if GPS fails - don't show error modal here
+				// Error was already shown in btn-capture handler if applicable
+				// Just proceed with cached location silently
 				performSaveActivity(id_company, id_patrol, scanned_barcode, judul_activity, deskripsi_activity, foto, currentLocation);
 			});
 	}
@@ -3088,6 +3291,14 @@ function initPatrolFunctionality() {
 		});
 	});
 	
+	// Initialize currentLocation variable to avoid undefined errors
+	let currentLocation = null;
+	
+	// Track GPS error display to prevent repeated modals
+	let gpsErrorShown = false;
+	let gpsErrorShownTime = 0;
+	const GPS_ERROR_DEBOUNCE_MS = 5000; // Only show error once per 5 seconds
+	
 	$('#btn-capture').click(function() {
 		const button = $('#btn-capture');
 		
@@ -3102,8 +3313,25 @@ function initPatrolFunctionality() {
 			})
 			.catch(err => {
 				console.error('GPS Error:', err);
-				// Use cached location if GPS fails
-				capturePhotoWithLocation(currentLocation);
+				// Use cached location if GPS fails, or null if no cached location
+				if (currentLocation) {
+					capturePhotoWithLocation(currentLocation);
+				} else {
+					// Only show error modal if not shown recently (debounce)
+					const now = Date.now();
+					if (!gpsErrorShown || (now - gpsErrorShownTime) > GPS_ERROR_DEBOUNCE_MS) {
+						gpsErrorShown = true;
+						gpsErrorShownTime = now;
+						Swal.fire({
+							icon: 'warning',
+							title: 'GPS Tidak Tersedia',
+							text: 'Tidak dapat mendapatkan lokasi GPS. Foto akan disimpan tanpa koordinat.',
+							confirmButtonText: 'OK'
+						});
+					}
+					// Capture photo with null location (function should handle this)
+					capturePhotoWithLocation(null);
+				}
 				button.prop('disabled', false).html('<i class="fas fa-camera me-2"></i>Ambil Foto');
 			});
 	});
@@ -3124,6 +3352,9 @@ function initPatrolFunctionality() {
 			
 			navigator.geolocation.getCurrentPosition(
 				position => {
+					// Reset error flag on successful GPS
+					gpsErrorShown = false;
+					gpsErrorShownTime = 0;
 					const location = {
 						lat: position.coords.latitude,
 						lng: position.coords.longitude,

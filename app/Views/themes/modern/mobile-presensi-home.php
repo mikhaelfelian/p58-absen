@@ -8,15 +8,23 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 print_r($setting_aplikasi);
 die; */
 ?>
-<div class="container mt-4">
-	<div class="text-center text-light">
-		<h5 class="m-0"><?=$user['nama']?></h5>
-		<p class="p-0"><?=$data_setelah_nama_user?></p>
+<div class="container py-4">
+	<!-- Header: User info -->
+	<div class="text-center text-light mb-3">
+		<h5 class="fw-semibold mb-1"><?=$user['nama']?></h5>
+		<p class="mb-0 small opacity-75"><?=$data_setelah_nama_user?></p>
 	</div>
-	<div class="bg-light p-4 mt-4 mb-4 rounded-3">
-		<div class="d-flex justify-content-between">
-			<div class="hari-tanggal"><?=$nama_hari[date('w')] . ', ' . date('d') . ' ' . $nama_bulan[date('n')] . ' ' . date('Y')?></div>
-			<div class="text-end" id="live-jam"><?=date('H:i:s')?></div>
+
+	<!-- Current date & time -->
+	<div class="bg-light text-dark p-3 rounded-3 shadow-sm mb-4">
+		<div class="d-flex justify-content-between align-items-center">
+			<div class="hari-tanggal fw-semibold">
+				<?=$nama_hari[date('w')] . ', ' . date('d') . ' ' . $nama_bulan[date('n')] . ' ' . date('Y')?>
+			</div>
+			<div class="text-end">
+				<div class="small text-muted">Waktu sekarang</div>
+				<div class="fw-semibold fs-5" id="live-jam"><?=date('H:i:s')?></div>
+			</div>
 		</div>
 	</div>
 	
@@ -29,14 +37,28 @@ die; */
 	}
 	?>
 	<?php if (empty($companies)): ?>
-	<div class="alert alert-warning">
-		<i class="fas fa-exclamation-triangle me-2"></i>
-		Anda belum di-assign ke perusahaan manapun. Silakan hubungi admin untuk melakukan penugasan.
-		<?php if (isset($debug_info) && !empty($debug_info)): ?>
-		<br><small>Debug: Total penugasan ditemukan: <?=$debug_info['total_assignments']?>, Perusahaan aktif: <?=$debug_info['active_companies']?></small>
-		<?php endif; ?>
+	<div class="alert alert-warning shadow-sm border-0 rounded-3">
+		<div class="d-flex">
+			<div class="me-3 d-flex align-items-start">
+				<i class="fas fa-exclamation-triangle fs-5 mt-1"></i>
+			</div>
+			<div>
+				<div class="fw-semibold mb-1">Belum ada penugasan perusahaan</div>
+				<div class="small mb-0">
+					Anda belum di-assign ke perusahaan manapun. Silakan hubungi admin untuk melakukan penugasan.
+				</div>
+				<?php if (isset($debug_info) && !empty($debug_info)): ?>
+				<div class="mt-2">
+					<small class="text-muted">
+						Debug: Total penugasan ditemukan: <?=$debug_info['total_assignments']?>,
+						Perusahaan aktif: <?=$debug_info['active_companies']?>
+					</small>
+				</div>
+				<?php endif; ?>
+			</div>
+		</div>
 	</div>
-	
+
 	<?php else: ?>
 	<?php
 	// Check if user has an active shift based on latest record (no date filtering)
@@ -63,61 +85,73 @@ die; */
 		}
 	}
 	?>
-	<div class="bg-light p-3 mb-3 rounded-3">
-		<label class="form-label mb-2"><strong>Lokasi Perusahaan</strong></label>
+	<!-- Company selection -->
+	<div class="bg-light p-3 mb-4 rounded-3 shadow-sm">
+		<div class="d-flex justify-content-between align-items-center mb-2">
+			<label class="form-label mb-0 fw-semibold">Lokasi Perusahaan</label>
+			<small class="text-muted">Pilih perusahaan tempat Anda bertugas</small>
+		</div>
 		<?php if ($is_readonly): ?>
 		<input type="text" class="form-control" value="<?=$active_company_name?>" readonly>
 		<input type="hidden" id="id_company" name="id_company" value="<?=$active_company_id?>">
-		<small class="text-success d-block mt-1">
+		<small class="text-success d-block mt-2">
 			<i class="fas fa-lock me-1"></i>
-			Perusahaan sudah terpilih untuk shift aktif. Tidak dapat diubah setelah absen masuk.
+			Perusahaan sudah terpilih untuk shift aktif dan tidak dapat diubah setelah absen masuk.
 		</small>
 		<?php else: ?>
 		<!-- Company Detection with Tabs -->
 		<div class="detection-wrapper">
 			<ul class="nav nav-pills nav-fill mb-3" id="company-detection-tabs" role="tablist" style="position: relative; z-index: 10;">
 				<li class="nav-item" role="presentation">
-					<button class="nav-link active" data-bs-toggle="pill" type="button" data-bs-target="#auto-detect-tab">
+					<button class="nav-link active fw-semibold" data-bs-toggle="pill" type="button" data-bs-target="#auto-detect-tab">
 						<i class="fas fa-location-crosshairs me-2"></i>Auto GPS
 					</button>
 				</li>
 				<li class="nav-item" role="presentation">
-					<button class="nav-link" data-bs-toggle="pill" type="button" data-bs-target="#manual-detect-tab">
+					<button class="nav-link fw-semibold" data-bs-toggle="pill" type="button" data-bs-target="#manual-detect-tab">
 						<i class="fas fa-list-ul me-2"></i>Pilih Manual
 					</button>
 				</li>
 			</ul>
-			<div class="tab-content border rounded-bottom p-3">
+			<div class="tab-content border rounded-3 p-3 bg-white">
 				<div class="tab-pane fade show active" id="auto-detect-tab">
 					<!-- Auto-detect company based on GPS location -->
-					<div id="company-detecting" class="text-center py-3">
+					<div id="company-detecting" class="text-center py-4">
 						<div class="spinner-border text-primary" role="status">
 							<span class="visually-hidden">Memuat...</span>
 						</div>
-						<p class="mt-2 mb-0"><small>Mendeteksi lokasi Anda...</small></p>
+						<p class="mt-3 mb-0 small text-muted">Mendeteksi lokasi Anda menggunakan GPS...</p>
 					</div>
 					<div id="company-detected" style="display:none;">
-						<div class="alert alert-success mb-0">
+						<div class="alert alert-success mb-0 rounded-3">
 							<i class="fas fa-map-marker-alt me-2"></i>
 							<strong id="detected-company-name"></strong>
 							<span id="detected-company-setting" class="badge bg-info ms-2" style="display:none;"></span>
 							<br>
-							<small id="detected-company-distance"></small>
+							<small id="detected-company-distance" class="text-muted"></small>
 						</div>
 					</div>
 					<div id="company-not-found" style="display:none;">
-						<div class="alert alert-danger mb-0">
+						<div class="alert alert-danger mb-0 rounded-3">
 							<i class="fas fa-exclamation-triangle me-2"></i>
 							<strong>Anda tidak berada di lokasi perusahaan manapun!</strong>
 							<br>
-							<small>Silakan pergi ke lokasi perusahaan yang sudah ditugaskan atau pilih manual.</small>
+							<small>Silakan pergi ke lokasi perusahaan yang sudah ditugaskan atau gunakan tab
+								<span class="fw-semibold">Pilih Manual</span>.</small>
 						</div>
 					</div>
 				</div>
 				<div class="tab-pane fade" id="manual-detect-tab">
-					<div class="alert alert-warning">
-						<i class="fas fa-info-circle me-2"></i>
-						GPS sulit mendeteksi lokasi? Pilih perusahaan secara manual.
+					<div class="alert alert-warning rounded-3">
+						<div class="d-flex">
+							<div class="me-3 d-flex align-items-start">
+								<i class="fas fa-info-circle mt-1"></i>
+							</div>
+							<div class="small">
+								<div class="fw-semibold mb-1">GPS sulit mendeteksi lokasi?</div>
+								<div>Pilih perusahaan secara manual dari daftar di bawah.</div>
+							</div>
+						</div>
 					</div>
 					<div class="mb-3">
 						<label class="form-label fw-semibold">Pilih Perusahaan</label>
@@ -223,65 +257,77 @@ die; */
 	?>
 	
 	<?php if (!$is_today_working_day): ?>
-	<div class="alert alert-info text-center">
+	<div class="alert alert-info text-center shadow-sm border-0 rounded-3">
 		<i class="fas fa-calendar-times me-2"></i>
 		<strong>Hari ini bukan hari kerja</strong><br>
 		<small>Presensi hanya dapat dilakukan pada hari kerja yang telah ditentukan.</small>
 	</div>
 	<?php else: ?>
-	<div class="row">
-		<div class="col-6 pe-2">
-			<a id="presensi-masuk" href="#" class="presensi-container box-absen-masuk d-flex rounded-3 px-4 py-4 w-100">
-				<div class="d-flex align-items-center w-100">
-					<i class="bi bi-box-arrow-in-right me-3 text-success icon-box-presensi" style="font-size:30px"></i>
-					<div class="w-100">
-						<h5 class="m-0 p-0">Masuk</h5>
-						<p class="mt-0 mb-0 waktu-presensi"><?=$waktu_masuk?></p>
-						<?php if ($tanggal_masuk): ?>
-						<p class="mt-1 mb-0 text-muted" style="font-size:0.75rem;"><?=$tanggal_masuk?></p>
-						<?php endif; ?>
-						<?php
-						// Show jam kerja target requirement
-						$jam_kerja_target = 12; // Default
-						if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
-							$jam_kerja_target = intval($companies[0]->jam_kerja_target);
-						}
-						?>
-					</div>
+	<div id="presensi-buttons-container">
+		<div class="bg-light rounded-3 shadow-sm p-3 mb-3">
+			<div class="row g-2">
+				<div class="col-6">
+					<a id="presensi-masuk" href="#" class="presensi-container box-absen-masuk d-flex rounded-3 px-3 py-3 w-100">
+						<div class="d-flex align-items-center w-100">
+							<i class="bi bi-box-arrow-in-right me-3 text-success icon-box-presensi" style="font-size:30px"></i>
+							<div class="w-100">
+								<div class="d-flex justify-content-between align-items-center">
+									<h6 class="m-0 fw-semibold">Masuk</h6>
+								</div>
+								<p class="mt-1 mb-0 waktu-presensi fs-5 fw-semibold"><?=$waktu_masuk?></p>
+								<?php if ($tanggal_masuk): ?>
+								<p class="mt-1 mb-0 text-muted small"><?=$tanggal_masuk?></p>
+								<?php endif; ?>
+								<?php
+								// Show jam kerja target requirement
+								$jam_kerja_target = 12; // Default
+								if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
+									$jam_kerja_target = intval($companies[0]->jam_kerja_target);
+								}
+								?>
+							</div>
+						</div>
+					</a>
 				</div>
-			</a>
-		</div>
-		<div class="d-flex col-6 ps-2">
-			<a id="presensi-pulang" href="#" class="bg-light presensi-container box-absen-pulang rounded-3 px-4 py-4" style="background:#fff6e8 !important;width:100%">
-				<div class="d-flex align-items-center">
-					<i class="bi bi-box-arrow-right me-3 text-warning icon-box-presensi" style="font-size:27px"></i>
-					<div class="w-100">
-						<h5 class="m-0 p-0">Pulang</h5>
-						<p class="mt-0 mb-0 waktu-presensi"><?=$waktu_pulang?></p>
-						<?php if ($tanggal_pulang): ?>
-						<p class="mt-1 mb-0 text-muted" style="font-size:0.75rem;"><?=$tanggal_pulang?></p>
-						<?php endif; ?>
-						<?php
-						// Show jam kerja target requirement
-						$jam_kerja_target = 12; // Default
-						if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
-							$jam_kerja_target = intval($companies[0]->jam_kerja_target);
-						}
-						?>
-					</div>
+				<div class="col-6">
+					<a id="presensi-pulang" href="#" class="bg-light presensi-container box-absen-pulang rounded-3 px-3 py-3 d-block" style="background:#fff6e8 !important;">
+						<div class="d-flex align-items-center">
+							<i class="bi bi-box-arrow-right me-3 text-warning icon-box-presensi" style="font-size:27px"></i>
+							<div class="w-100">
+								<div class="d-flex justify-content-between align-items-center">
+									<h6 class="m-0 fw-semibold">Pulang</h6>
+								</div>
+								<p class="mt-1 mb-0 waktu-presensi fs-5 fw-semibold"><?=$waktu_pulang?></p>
+								<?php if ($tanggal_pulang): ?>
+								<p class="mt-1 mb-0 text-muted small"><?=$tanggal_pulang?></p>
+								<?php endif; ?>
+								<?php
+								// Show jam kerja target requirement
+								$jam_kerja_target = 12; // Default
+								if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
+									$jam_kerja_target = intval($companies[0]->jam_kerja_target);
+								}
+								?>
+							</div>
+						</div>
+					</a>
 				</div>
-			</a>
+			</div>
 		</div>
-	</div>
-	<div id="alert-lokasi">
+		<div id="alert-lokasi"></div>
 	</div>
 	<?php endif; ?>
-	<p class="text-light mt-4">
-	Riwayat Presensi
-	</p>
-		<div class="bg-light p-4 rounded-3">
+
+	<!-- Riwayat presensi -->
+	<div id="presensi-history-container">
+		<div class="d-flex align-items-center justify-content-between mt-4 mb-2">
+			<p class="text-light mb-0 fw-semibold">
+				Riwayat Presensi
+			</p>
+		</div>
+		<div class="bg-light p-3 rounded-3 shadow-sm">
 			<div class="table-responsive">
-				<table class="table table-striped table-hover table-bordered mb-0">
+				<table class="table table-striped table-hover table-bordered table-sm mb-0 align-middle">
 					<thead class="table-dark">
 						<tr>
 							<th class="text-center" style="width: 50px;">No</th>
@@ -387,6 +433,7 @@ die; */
 				</table>
 			</div>
 		</div>
+	</div>
 	<input type="hidden" id="page-type" value="kasir"/>
 	<input type="hidden" id="selected-company-id" value=""/>
 	<input type="hidden" id="selected-company-lat" value=""/>

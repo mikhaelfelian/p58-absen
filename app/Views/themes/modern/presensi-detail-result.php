@@ -54,11 +54,8 @@ helper('html');
 					if ($user) {
 						echo options(['name' => 'status']
 								, ['' => 'Semua'
-									, 'tepat_waktu' => 'Tepat Waktu'
-									, 'terlambat_masuk' => 'Terlambat Masuk'
-									, 'pulang_sebelum_waktunya' => 'Pulang Sebelum Waktunya'
-									, 'terlambat_masuk_dan_pulang_sebelum_waktunya' => 'Terlambat Masuk dan Pulang Sebelum Waktunya'
-									, 'tidak_absen' => 'Tidak Absen'
+									, 'masuk' => 'Masuk'
+									, 'pulang_belum_waktu' => 'Pulang Belum Waktu'
 								]
 								);
 					} else {

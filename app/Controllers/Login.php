@@ -92,13 +92,14 @@ class Login extends \App\Controllers\BaseController
 			return;
 		}
 		
-		if ($this->request->getPost('remember')) 
-		{
-			$this->model->setUserToken($user);
-		}
+		// if ($this->request->getPost('remember')) 
+		// {
+		// 	$this->model->setUserToken($user);
+		// }
 
 		$this->session->set('user', $user);
 		$this->session->set('logged_in', true);
+		$this->model->setUserToken($user);
 		$this->model->recordLogin();
 	}
 	

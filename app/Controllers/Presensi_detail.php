@@ -112,11 +112,9 @@ class Presensi_detail extends \App\Controllers\BaseController
 	{
 		$result = $this->model->getAllUser();
 		
-		if (has_permission('read_own')) {
-			$user = [];
-		} else {
-			$user = ['' => 'Semua'];
-		}
+		// Tampilkan semua user (kecuali root id=1 yang sudah difilter di model)
+		// tanpa pembatasan permission. Untuk filter laporan tetap sediakan opsi \"Semua\".
+		$user = ['' => 'Semua'];
 		foreach ($result as $val) {
 			$user[$val['id_user']] = $val['nama'];
 		}
@@ -325,23 +323,28 @@ class Presensi_detail extends \App\Controllers\BaseController
 		$no = $this->request->getPost('start') + 1 ?: 1;
 		foreach ($query['data'] as $key => &$val) 
 		{
+			// Simplified status badges for detail view:
+			// - Masuk  -> green
+			// - Pulang Belum Waktu -> orange
+			// - empty / others -> muted
 			switch ($val['status']) {
-				case 'Tepat waktu':
+				case 'Masuk':
 					$color = 'success';
 					break;
-				case 'Tidak absen':
-					$color = 'danger';
+				case 'Pulang Belum Waktu':
+					$color = 'warning';
 					break;
 				default:
-					$color = 'warning';
+					$color = 'secondary';
 					break;
 			}
 			
-			$val['status'] = '<span class="badge rounded-pill text-bg-' . $color . '">' . $val['status'] . '</span>';
+			$label = $val['status'] !== '' ? $val['status'] : '-';
+			$val['status'] = '<span class="badge rounded-pill text-bg-' . $color . '">' . $label . '</span>';
 			
 			$val['ignore_urut'] = $no;
 			$val['ignore_action'] = '<div class="btn-action-group">' . 
-				btn_link(['url' => base_url() . 'presensi-detail/edit?id=' . $val['id_user_presensi']
+				btn_link(['url' => base_url() . 'presensi-detail/edit?id=' . $val['id']
 						,'label' => 'Edit'
 						, 'icon' => 'fas fa-edit'
 						, 'attr' => ['target' => '_blank', 'class' => 'btn btn-success btn-xs me-1', 'data-bs-toggle' => 'tooltip', 'data-bs-title' => 'Edit Data'] ]
@@ -349,7 +352,7 @@ class Presensi_detail extends \App\Controllers\BaseController
 				btn_label(['label' => 'Delete'
 						, 'icon' => 'fas fa-times'
 						, 'attr' => ['class' => 'btn btn-danger btn-xs btn-del-presensi'
-						, 'data-id' => $val['id_user_presensi']
+						, 'data-id' => $val['id']
 						, 'data-delete-message' => 'Hapus data presensi ' . $val['jenis_presensi'] . ' tanggal ' . format_tanggal($val['tanggal']) . ' pukul ' . $val['waktu'] . ' atas nama ' . $val['nama'] . ' ?', 'data-bs-toggle' => 'tooltip', 'data-bs-title' => 'Delete Data'] ]) . 
 			'</div>';
 			

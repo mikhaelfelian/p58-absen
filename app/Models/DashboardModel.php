@@ -332,20 +332,15 @@ class DashboardModel extends \App\Models\BaseModel
 	 * Get minimal attendance stats for current user
 	 */
 	public function getUserAttendanceStats($id_user, $tahun) {
-		// Get basic stats: total attendance, on time, late, absent
+		// Get basic stats: total attendance, masuk, pulang (no late/on-time calculation)
 		$start_date = $tahun . '-01-01';
 		$end_date = date('Y-m-d');
 		
 		$sql = 'SELECT 
 					COUNT(*) AS total_presensi,
 					SUM(CASE WHEN user_presensi.tgl_masuk IS NOT NULL THEN 1 ELSE 0 END) AS masuk,
-					SUM(CASE WHEN user_presensi.tgl_keluar IS NOT NULL THEN 1 ELSE 0 END) AS pulang,
-					SUM(CASE WHEN TIME(user_presensi.tgl_masuk) > setting_waktu_presensi.batas_waktu_masuk THEN 1 ELSE 0 END) AS terlambat,
-					SUM(CASE WHEN TIME(user_presensi.tgl_masuk) <= setting_waktu_presensi.batas_waktu_masuk THEN 1 ELSE 0 END) AS tepat_waktu
+					SUM(CASE WHEN user_presensi.tgl_keluar IS NOT NULL THEN 1 ELSE 0 END) AS pulang
 				FROM user_presensi
-				LEFT JOIN user_company ON user_presensi.id_user = user_company.id_user 
-					AND user_presensi.id_company = user_company.id_company
-				LEFT JOIN setting_waktu_presensi ON user_company.id_setting_waktu_presensi = setting_waktu_presensi.id_setting_waktu_presensi
 				WHERE user_presensi.id_user = ? AND DATE(user_presensi.tgl_masuk) BETWEEN ? AND ?';
 		
 		$result = $this->db->query($sql, [$id_user, $start_date, $end_date])->getRowArray();
@@ -408,26 +403,20 @@ class DashboardModel extends \App\Models\BaseModel
 	 * Get recent presensi for a user
 	 */
 	public function getRecentPresensi($id_user, $limit = 10) {
-		$sql = 'SELECT tanggal, jenis_presensi, waktu, batas_waktu_presensi
+		$sql = 'SELECT tanggal, jenis_presensi, waktu, is_valid
 				FROM (
 					SELECT DATE(user_presensi.tgl_masuk) AS tanggal,
 							"masuk" AS jenis_presensi,
 							TIME(user_presensi.tgl_masuk) AS waktu,
-							setting_waktu_presensi.batas_waktu_masuk AS batas_waktu_presensi
+							user_presensi.is_valid AS is_valid
 					FROM user_presensi
-					LEFT JOIN user_company ON user_presensi.id_user = user_company.id_user 
-						AND user_presensi.id_company = user_company.id_company
-					LEFT JOIN setting_waktu_presensi ON user_company.id_setting_waktu_presensi = setting_waktu_presensi.id_setting_waktu_presensi
-					WHERE user_presensi.id_user = ?
+					WHERE user_presensi.id_user = ? AND user_presensi.tgl_masuk IS NOT NULL
 					UNION ALL
 					SELECT DATE(user_presensi.tgl_masuk) AS tanggal,
 							"pulang" AS jenis_presensi,
 							TIME(user_presensi.tgl_keluar) AS waktu,
-							setting_waktu_presensi.batas_waktu_pulang AS batas_waktu_presensi
+							user_presensi.is_valid AS is_valid
 					FROM user_presensi
-					LEFT JOIN user_company ON user_presensi.id_user = user_company.id_user 
-						AND user_presensi.id_company = user_company.id_company
-					LEFT JOIN setting_waktu_presensi ON user_company.id_setting_waktu_presensi = setting_waktu_presensi.id_setting_waktu_presensi
 					WHERE user_presensi.id_user = ? AND user_presensi.tgl_keluar IS NOT NULL
 				) AS combined_data
 				ORDER BY tanggal DESC, jenis_presensi DESC

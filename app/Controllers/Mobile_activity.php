@@ -118,9 +118,9 @@ class Mobile_activity extends BaseController
 			$error[] = 'Judul activity harus diisi';
 		}
 		
-		if (empty($data_array['deskripsi_activity'])) {
-			$error[] = 'Deskripsi activity harus diisi';
-		}
+		// if (empty($data_array['deskripsi_activity'])) {
+		// 	$error[] = 'Deskripsi activity harus diisi';
+		// }
 		
 		// Handle photo upload (multiple photos as JSON array)
 		$foto_activity_data = null;

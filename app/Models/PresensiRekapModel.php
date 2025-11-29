@@ -11,12 +11,9 @@ namespace App\Models;
 class PresensiRekapModel extends \App\Models\BaseModel
 {
 	public function getAllUser() {
-		$where = '';
-		if (has_permission('read_own')) {
-			$where = ' WHERE id_user = ' . $_SESSION['user']['id_user'];
-		}
-		
-		$sql = 'SELECT * FROM user' . $where;
+		// Tampilkan semua pegawai tanpa pembatasan hak akses,
+		// karena dropdown di laporan rekap presensi harus bisa memilih siapa saja.
+		$sql = 'SELECT * FROM user';
 		$result = $this->db->query($sql)->getResultArray();
 		
 		return $result;
@@ -24,56 +21,49 @@ class PresensiRekapModel extends \App\Models\BaseModel
 	
 	public function getPresensiByMonth($month, $year, $id_company = null) 
 	{
-		if (has_permission('read_own')) {
-			$id_user = ' AND user_presensi.id_user = ' . $_SESSION['user']['id_user'];
-		} else {
-			$id_user = !empty($_GET['id_user']) ? ' AND user_presensi.id_user = ' . intval($_GET['id_user']) : '';
-		}
-		
-		// Add company filter if provided
+		// User filter: use explicit GET id_user when provided, otherwise no restriction
+		$id_user_filter = !empty($_GET['id_user']) ? ' AND up.id_user = ' . intval($_GET['id_user']) : '';
+
+		// Filter company if provided
 		$company_filter = '';
 		if (!empty($id_company)) {
-			$company_filter = ' AND user_presensi.id_company = ' . intval($id_company);
+			$company_filter = ' AND up.id_company = ' . intval($id_company);
 		}
-		
-		$num_day = date('t', strtotime($year . '-' . $month . '-' . '01'));
-		$sql = 'SELECT  id_user, day,
-					CASE
-						WHEN (waktu_presensi_masuk IS NULL OR waktu_presensi_masuk = "" OR waktu_presensi_masuk = "00:00:00") AND waktu_presensi_pulang > batas_waktu_presensi_pulang
-								THEN "tam"
-						WHEN (waktu_presensi_masuk IS NULL OR waktu_presensi_masuk = "" OR waktu_presensi_masuk = "00:00:00") AND waktu_presensi_pulang < batas_waktu_presensi_pulang
-								THEN "tam_psw"
-						WHEN waktu_presensi_masuk < batas_waktu_presensi_masuk  AND (waktu_presensi_pulang IS NULL OR waktu_presensi_pulang = "" OR waktu_presensi_pulang = "00:00:00")
-								THEN "tap"
-						WHEN waktu_presensi_masuk > batas_waktu_presensi_masuk  AND (waktu_presensi_pulang IS NULL OR waktu_presensi_pulang = "" OR waktu_presensi_pulang = "00:00:00")
-								THEN "tl_tap"
-						WHEN (waktu_presensi_masuk IS NULL OR waktu_presensi_masuk = "" OR waktu_presensi_masuk = "00:00:00")  AND (waktu_presensi_pulang IS NULL OR waktu_presensi_pulang = "" OR waktu_presensi_pulang = "00:00:00")
-								THEN "tam_tap"
-						WHEN waktu_presensi_masuk > batas_waktu_presensi_masuk  AND (waktu_presensi_pulang IS NULL OR waktu_presensi_pulang = "" OR waktu_presensi_pulang = "00:00:00")
-								THEN "tl_tap"
-						WHEN waktu_presensi_masuk > batas_waktu_presensi_masuk 
-								AND waktu_presensi_pulang < batas_waktu_presensi_pulang
-								THEN "tl_psw"
-						WHEN waktu_presensi_masuk > batas_waktu_presensi_masuk 
-								THEN "tl"
-						WHEN waktu_presensi_pulang < batas_waktu_presensi_pulang 
-								THEN "psw"
-						ELSE "tw"
-					END AS status
-				FROM
-				( 
-					SELECT user_presensi.id_user, DAY(user_presensi.tanggal) AS day,
-							MIN(IF(user_presensi.jenis_presensi = "masuk", user_presensi.waktu, NULL)) AS waktu_presensi_masuk 
-							, MAX(IF(user_presensi.jenis_presensi = "pulang", user_presensi.waktu, NULL)) AS waktu_presensi_pulang
-							, MIN(IF(user_presensi.jenis_presensi = "masuk", user_presensi.batas_waktu_presensi, NULL)) AS batas_waktu_presensi_masuk
-							, MAX(IF(user_presensi.jenis_presensi = "pulang", user_presensi.batas_waktu_presensi, NULL)) AS batas_waktu_presensi_pulang
-					FROM user_presensi
-					LEFT JOIN user ON user_presensi.id_user = user.id_user
-					WHERE user_presensi.tanggal >= "' . $year . '-' . $month . '-01" AND user_presensi.tanggal <= "' . $year . '-' . $month . '-' . $num_day .'" ' . $id_user . $company_filter . '
-					GROUP BY user_presensi.tanggal, user_presensi.id_user
-				) AS tabel ';
+
+		// Range tanggal bulan
+		$num_day = date('t', strtotime($year . '-' . $month . '-01'));
+		$start_date = $year . '-' . $month . '-01';
+		$end_date   = $year . '-' . $month . '-' . $num_day;
+
+		$sql = '
+			SELECT 
+				up.id_user,
+				DAY(up.tgl_masuk) AS `day`,
+				CASE
+					-- Hadir masuk & pulang, durasi memenuhi target -> V (valid)
+					WHEN up.tgl_masuk IS NOT NULL 
+					     AND up.tgl_keluar IS NOT NULL 
+					     AND COALESCE(up.is_valid, 0) = 1
+						THEN "v"
+					-- Hadir masuk & pulang, tapi tidak memenuhi target jam kerja -> PSW
+					WHEN up.tgl_masuk IS NOT NULL 
+					     AND up.tgl_keluar IS NOT NULL 
+					     AND COALESCE(up.is_valid, 0) = 0
+						THEN "psw"
+					-- Masuk ada, pulang tidak tercatat -> TAP (Tidak Absen Pulang)
+					WHEN up.tgl_masuk IS NOT NULL 
+					     AND up.tgl_keluar IS NULL
+						THEN "tap"
+					ELSE NULL
+				END AS status
+			FROM user_presensi up
+			LEFT JOIN user u ON up.id_user = u.id_user
+			WHERE DATE(up.tgl_masuk) >= ' . $this->db->escape($start_date) . '
+			  AND DATE(up.tgl_masuk) <= ' . $this->db->escape($end_date) . '
+			  ' . $id_user_filter . $company_filter;
+
 		$result = $this->db->query($sql)->getResultArray();
-		
+
 		return $result;
 	}
 	
@@ -124,7 +114,7 @@ class PresensiRekapModel extends \App\Models\BaseModel
 	}
 	
 	public function getUserPresensiById($id) {
-		$sql = 'SELECT * FROM user_presensi WHERE id_user_presensi = ?';
+		$sql = 'SELECT * FROM user_presensi WHERE id = ?';
 		$result = $this->db->query($sql, $id)->getRowArray();
 		return $result;
 	}
@@ -173,7 +163,7 @@ class PresensiRekapModel extends \App\Models\BaseModel
 	}
 	
 	public function deleteData($id) {
-		$delete = $this->db->table('user_presensi')->delete(['id_user_presensi' => $id]);
+		$delete = $this->db->table('user_presensi')->delete(['id' => $id]);
 		return $delete;
 	}
 	
@@ -209,7 +199,7 @@ class PresensiRekapModel extends \App\Models\BaseModel
 					|| $_POST['foto_delete_img'] == 1) {
 				
 
-				$sql = 'SELECT foto FROM user_presensi WHERE id_user_presensi = ?';
+				$sql = 'SELECT foto FROM user_presensi WHERE id = ?';
 				$img_db = $this->db->query($sql, $_POST['id'])->getRowArray();
 				if ($img_db['foto']) {
 					$del = delete_file($path . $img_db['foto']);
@@ -258,7 +248,7 @@ class PresensiRekapModel extends \App\Models\BaseModel
 		if ($id) {
 			$data_db['id_user_update'] = session()->get('user')['id_user'];
 			$data_db['tgl_update'] = date('Y-m-d');
-			$query = $this->db->table('user_presensi')->update($data_db, ['id_user_presensi' => $id]);
+			$query = $this->db->table('user_presensi')->update($data_db, ['id' => $id]);
 		} else {
 			$data_db['id_user_input'] = session()->get('user')['id_user'];
 			$data_db['tgl_input'] = date('Y-m-d');

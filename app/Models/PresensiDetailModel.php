@@ -12,12 +12,8 @@ class PresensiDetailModel extends \App\Models\BaseModel
 {
 	public function getAllUser() {
 		
-		$where = '';
-		if (has_permission('read_own')) {
-			$where = ' WHERE id_user = ' . $_SESSION['user']['id_user'];
-		}
-		
-		$sql = 'SELECT * FROM user' . $where;
+		// Tampilkan semua user kecuali root (id = 1), tanpa pembatasan permission.
+		$sql = 'SELECT * FROM user WHERE id_user <> 1';
 		$result = $this->db->query($sql)->getResultArray();
 		
 		return $result;
@@ -70,62 +66,91 @@ class PresensiDetailModel extends \App\Models\BaseModel
 	}
 	
 	public function getUserPresensiById($id) {
-		$sql = 'SELECT * FROM user_presensi WHERE id_user_presensi = ?';
+		// Sesuaikan dengan primary key baru tabel user_presensi (id)
+		$sql = 'SELECT * FROM user_presensi WHERE id = ?';
 		$result = $this->db->query($sql, $id)->getRowArray();
 		return $result;
 	}
 	
 	public function getUserPresensiByDate($start_date, $end_date) 
 	{
-		if (has_permission('read_own')) {
-			$id_user = ' AND id_user = ' . $_SESSION['user']['id_user'];
-		} else {
-			$id_user = !empty($_GET['id_user']) ? ' AND id_user = ' . $_GET['id_user'] : '';
-		}
-		$jenis_presensi = $_GET['jenis_presensi'] ? ' AND jenis_presensi = "' . $_GET['jenis_presensi'] . '"' : '';
+		// Filter user: only by explicit GET id_user when provided (no permission restriction)
+		$id_user = !empty($_GET['id_user']) ? ' AND t.id_user = ' . intval($_GET['id_user']) : '';
+
+		// Filter jenis presensi (masuk / pulang)
+		$jenis_presensi = !empty($_GET['jenis_presensi']) ? ' AND t.jenis_presensi = "' . $this->db->escapeString($_GET['jenis_presensi']) . '"' : '';
+
+		// Status filter: only two logical states - Masuk & Pulang Belum Waktu
 		$status = '';
-		if ($_GET['status']) {
+		if (!empty($_GET['status'])) {
 			switch ($_GET['status']) {
-				case 'tepat_waktu':
-					$status = ' AND ( (jenis_presensi = "masuk" AND waktu <= batas_waktu_presensi) OR (jenis_presensi = "pulang" AND waktu >= batas_waktu_presensi) )';
+				case 'masuk':
+					$status = ' AND t.jenis_presensi = "masuk"';
 					break;
-				case 'terlambat_masuk':
-					$status = ' AND jenis_presensi = "masuk" AND waktu >= batas_waktu_presensi';
-					break;
-				case 'pulang_sebelum_waktunya':
-					$status = ' AND jenis_presensi = "pulang" AND waktu <= batas_waktu_presensi';
-					break;
-				case 'terlambat_masuk_dan_pulang_sebelum_waktunya':
-					$status = ' AND ( (jenis_presensi = "masuk" AND waktu >= batas_waktu_presensi) OR (jenis_presensi = "pulang" AND waktu <= batas_waktu_presensi) )';
-					break;
-				case 'tidak_absen':
-					$status = ' AND (waktu IS NULL OR waktu = "" OR waktu = "00:00:00")';
+				case 'pulang_belum_waktu':
+					$status = ' AND t.jenis_presensi = "pulang" AND t.is_valid = 0';
 					break;
 			}
 		}
 		
-		$sql = 'SELECT nama, tanggal, jenis_presensi, waktu, batas_waktu_presensi,
+		// Bangun data presensi dari skema baru user_presensi (per shift)
+		$sql = '
+			SELECT 
+				t.nama,
+				t.tanggal,
+				t.jenis_presensi,
+				t.waktu,
+				NULL AS batas_waktu_presensi,
 				CASE 
-					WHEN (jenis_presensi = "masuk" AND waktu <= batas_waktu_presensi) OR (jenis_presensi = "pulang" AND waktu >= batas_waktu_presensi)
-						THEN "Tepat waktu"
-					WHEN jenis_presensi = "masuk" AND waktu >= batas_waktu_presensi
-						THEN "Terlambat masuk"
-					WHEN jenis_presensi = "pulang" AND waktu <= batas_waktu_presensi
-						THEN "Pulang sebelum waktunya"
-					WHEN waktu IS NULL OR waktu = "" OR waktu = "00:00:00"
-						THEN "Tidak absen"
+					WHEN t.jenis_presensi = "masuk" THEN "Masuk"
+					WHEN t.jenis_presensi = "pulang" AND t.is_valid = 0 THEN "Pulang Belum Waktu"
+					ELSE ""
 				END AS status,
-				CONCAT(latitude, ",", longitude) AS koordinat  
-				FROM user_presensi
-				LEFT JOIN user USING(id_user)
-				WHERE tanggal >= ? AND tanggal <= ? ' . $id_user . $jenis_presensi . $status;
+				CONCAT(t.latitude, ",", t.longitude) AS koordinat  
+			FROM (
+				-- Presensi masuk
+				SELECT 
+					up.id               AS id,
+					up.id_user,
+					u.nama,
+					DATE(up.tgl_masuk) AS tanggal,
+					"masuk"            AS jenis_presensi,
+					TIME(up.tgl_masuk) AS waktu,
+					up.is_valid,
+					up.latitude,
+					up.longitude
+				FROM user_presensi up
+				LEFT JOIN user u ON up.id_user = u.id_user
+				WHERE up.tgl_masuk IS NOT NULL
+				
+				UNION ALL
+				
+				-- Presensi pulang
+				SELECT 
+					up.id               AS id,
+					up.id_user,
+					u.nama,
+					DATE(up.tgl_keluar) AS tanggal,
+					"pulang"            AS jenis_presensi,
+					TIME(up.tgl_keluar) AS waktu,
+					up.is_valid,
+					up.latitude,
+					up.longitude
+				FROM user_presensi up
+				LEFT JOIN user u ON up.id_user = u.id_user
+				WHERE up.tgl_keluar IS NOT NULL
+			) AS t
+			WHERE t.tanggal >= ? AND t.tanggal <= ?
+			' . $id_user . $jenis_presensi . $status . '
+			ORDER BY t.tanggal ASC, t.nama ASC, t.jenis_presensi ASC
+		';
 				
 		$result = $this->db->query($sql, [$start_date, $end_date])->getResultArray();
 		return $result;
 	}
 	
 	public function deleteData($id) {
-		$delete = $this->db->table('user_presensi')->delete(['id_user_presensi' => $id]);
+		$delete = $this->db->table('user_presensi')->delete(['id' => $id]);
 		return $delete;
 	}
 	
@@ -161,7 +186,7 @@ class PresensiDetailModel extends \App\Models\BaseModel
 					|| $_POST['foto_delete_img'] == 1) {
 				
 
-				$sql = 'SELECT foto FROM user_presensi WHERE id_user_presensi = ?';
+				$sql = 'SELECT foto FROM user_presensi WHERE id = ?';
 				$img_db = $this->db->query($sql, $_POST['id'])->getRowArray();
 				if ($img_db['foto']) {
 					$del = delete_file($path . $img_db['foto']);
@@ -210,7 +235,7 @@ class PresensiDetailModel extends \App\Models\BaseModel
 		if ($id) {
 			$data_db['id_user_update'] = session()->get('user')['id_user'];
 			$data_db['tgl_update'] = date('Y-m-d');
-			$query = $this->db->table('user_presensi')->update($data_db, ['id_user_presensi' => $id]);
+			$query = $this->db->table('user_presensi')->update($data_db, ['id' => $id]);
 		} else {
 			$data_db['id_user_input'] = session()->get('user')['id_user'];
 			$data_db['tgl_input'] = date('Y-m-d');
@@ -226,14 +251,34 @@ class PresensiDetailModel extends \App\Models\BaseModel
 	}
 	
 	public function countAllDataPresensi() {
-		if (has_permission('read_own')) {
-			$user = ' AND id_user = ' . $_SESSION['user']['id_user'];
-		} else {
-			$user = !empty($_GET['id_user']) ? ' AND id_user = ' . $_GET['id_user'] : '';
-		}
-		$sql = 'SELECT COUNT(*) AS jml FROM user_presensi AS tabel WHERE tanggal >= ? AND tanggal <= ?' . $user;
-		$result = $this->db->query($sql, [$_GET['start_date'], $_GET['end_date']])->getRow();
-		return $result->jml;
+		// Count over all users, optionally filtered by explicit GET id_user
+		$user = !empty($_GET['id_user']) ? ' AND t.id_user = ' . intval($_GET['id_user']) : '';
+
+		$start_date = $_GET['start_date'];
+		$end_date   = $_GET['end_date'];
+
+		$sql = '
+			SELECT COUNT(*) AS jml
+			FROM (
+				SELECT 
+					up.id_user,
+					DATE(up.tgl_masuk) AS tanggal
+				FROM user_presensi up
+				WHERE up.tgl_masuk IS NOT NULL
+				
+				UNION ALL
+				
+				SELECT 
+					up.id_user,
+					DATE(up.tgl_keluar) AS tanggal
+				FROM user_presensi up
+				WHERE up.tgl_keluar IS NOT NULL
+			) AS t
+			WHERE t.tanggal >= ? AND t.tanggal <= ?
+			' . $user;
+
+		$result = $this->db->query($sql, [$start_date, $end_date])->getRow();
+		return $result ? $result->jml : 0;
 	}
 	
 	public function getListPresensi() 
@@ -241,16 +286,12 @@ class PresensiDetailModel extends \App\Models\BaseModel
 
 		$columns = $this->request->getPost('columns');
 
-		// Search
-		if (has_permission('read_own')) {
-			$user = ' AND id_user = ' . $_SESSION['user']['id_user'];
-		} else {
-			$user = !empty($_GET['id_user']) ? ' AND id_user = ' . $_GET['id_user'] : '';
-		}
-		$jenis_presensi = !empty($_GET['jenis_presensi']) ? ' AND jenis_presensi = "' . $_GET['jenis_presensi'] . '"' : '';
+		// Filter user & jenis presensi (no permission restriction)
+		$user = !empty($_GET['id_user']) ? ' AND t.id_user = ' . intval($_GET['id_user']) : '';
+		$jenis_presensi = !empty($_GET['jenis_presensi']) ? ' AND t.jenis_presensi = "' . $this->db->escapeString($_GET['jenis_presensi']) . '"' : '';
 		
 		$search_all = @$this->request->getPost('search')['value'];
-		$where = ' WHERE tanggal >= ? AND tanggal <= ? ' . $user . $jenis_presensi;
+		$where = ' WHERE t.tanggal >= ? AND t.tanggal <= ? ' . $user . $jenis_presensi;
 		if ($search_all) {
 			foreach ($columns as $val) {
 				
@@ -260,75 +301,90 @@ class PresensiDetailModel extends \App\Models\BaseModel
 				if (strpos($val['data'], 'ignore') !== false)
 					continue;
 				
-				$where_col[] = $val['data'] . ' LIKE "%' . $search_all . '%"';
+				$where_col[] = 't.' . $val['data'] . ' LIKE "%' . $this->db->escapeString($search_all) . '%"';
 			}
 			 $where .= ' AND (' . join(' OR ', $where_col) . ') ';
 		}
 		
 		if (!empty($_GET['status'])) {
 			switch ($_GET['status']) {
-				case 'tepat_waktu':
-					$where .= ' AND ( 
-						(jenis_presensi = "masuk" AND waktu <= batas_waktu_presensi) 
-							OR 
-						(jenis_presensi = "pulang" AND waktu >= batas_waktu_presensi)
-					)';
+				case 'masuk':
+					$where .= ' AND t.jenis_presensi = "masuk"';
 					break;
-				case 'terlambat_masuk':
-					$where .= ' AND jenis_presensi = "masuk" AND waktu > batas_waktu_presensi';
-					break;
-				case 'pulang_sebelum_waktunya':
-					$where .= ' AND jenis_presensi = "pulang" AND waktu < batas_waktu_presensi';
-					break;
-				case 'terlambat_masuk_dan_pulang_sebelum_waktunya':
-					$where .= ' AND (
-						( jenis_presensi = "masuk" AND waktu > batas_waktu_presensi )
-						OR 
-						( jenis_presensi = "pulang" AND waktu < batas_waktu_presensi)
-					)';
-					break;
-				case 'tidak_absen':
-					$where .= ' AND (waktu IS NULL OR waktu = "" OR waktu = "00:00:00")';
+				case 'pulang_belum_waktu':
+					$where .= ' AND t.jenis_presensi = "pulang" AND t.is_valid = 0';
 					break;
 			}
 		}
 		
+		// Subquery dari skema baru user_presensi
+		$baseSubquery = '
+			FROM (
+				SELECT 
+					up.id               AS id,
+					up.id_user,
+					u.nama,
+					up.foto,
+					DATE(up.tgl_masuk) AS tanggal,
+					"masuk"            AS jenis_presensi,
+					TIME(up.tgl_masuk) AS waktu,
+					up.is_valid,
+					up.latitude,
+					up.longitude
+				FROM user_presensi up
+				LEFT JOIN user u ON up.id_user = u.id_user
+				WHERE up.tgl_masuk IS NOT NULL
+				
+				UNION ALL
+				
+				SELECT 
+					up.id               AS id,
+					up.id_user,
+					u.nama,
+					up.foto,
+					DATE(up.tgl_keluar) AS tanggal,
+					"pulang"            AS jenis_presensi,
+					TIME(up.tgl_keluar) AS waktu,
+					up.is_valid,
+					up.latitude,
+					up.longitude
+				FROM user_presensi up
+				LEFT JOIN user u ON up.id_user = u.id_user
+				WHERE up.tgl_keluar IS NOT NULL
+			) AS t ';
+		
 		// Query Total Filtered
-		$sql = 'SELECT COUNT(*) AS jml
-				FROM user_presensi
-				LEFT JOIN user USING(id_user)' . $where;
+		$sql = 'SELECT COUNT(*) AS jml ' . $baseSubquery . $where;
 		$data = $this->db->query($sql, [$_GET['start_date'], $_GET['end_date']])->getRowArray();
 		$total_filtered = $data['jml'];
 		
-		// Order
-		$order_data = $this->request->getPost('order');
+		// Order (guard against missing DataTables order payload)
+		$order_data = (array) $this->request->getPost('order');
 		$order = '';
-		if (strpos($_POST['columns'][$order_data[0]['column']]['data'], 'ignore_search') === false) {
-			$order_by = $columns[$order_data[0]['column']]['data'] . ' ' . strtoupper($order_data[0]['dir']);
-			$order = ' ORDER BY ' . $order_by;
+		if (!empty($order_data) && isset($order_data[0]['column'])) {
+			$colIndex = (int) $order_data[0]['column'];
+			if (isset($columns[$colIndex]) && strpos($columns[$colIndex]['data'], 'ignore_search') === false) {
+				$dir = isset($order_data[0]['dir']) ? strtoupper($order_data[0]['dir']) : 'ASC';
+				$order_by = 't.' . $columns[$colIndex]['data'] . ' ' . $dir;
+				$order = ' ORDER BY ' . $order_by;
+			}
 		}
 
 		$start = $this->request->getPost('start') ?: 0;
 		$length = $this->request->getPost('length') ?: 10;
 		
-		// Query Data
-		$sql = 'SELECT *,
+		// Query Data, with simplified statuses:
+		// - 'Masuk' for all clock-in records
+		// - 'Pulang Belum Waktu' for clock-out records that are not valid
+		$sql = 'SELECT 
+					t.*,
 					CASE 
-						WHEN waktu IS NULL OR waktu = "" OR waktu = "00:00:00"
-								THEN "Tidak absen"
-						WHEN jenis_presensi = "masuk" AND waktu > batas_waktu_presensi
-								THEN "Terlambat masuk"
-						WHEN jenis_presensi = "masuk" AND waktu <= batas_waktu_presensi 
-								THEN "Tepat waktu"
-						WHEN jenis_presensi = "pulang" AND waktu < batas_waktu_presensi 
-								THEN "Pulang sebelum waktunya"
-						WHEN jenis_presensi = "pulang" AND waktu >= batas_waktu_presensi 
-								THEN "Tepat waktu"
+						WHEN t.jenis_presensi = \'masuk\' THEN \'Masuk\'
+						WHEN t.jenis_presensi = \'pulang\' AND t.is_valid = 0 THEN \'Pulang Belum Waktu\'
+						ELSE \'\'
 					END AS status
-				FROM user_presensi
-				LEFT JOIN user USING(id_user)
-				' . $where . $order . ' LIMIT ' . $start . ', ' . $length;
-		// echo $sql; die;
+				' . $baseSubquery . $where . $order . ' LIMIT ' . $start . ', ' . $length;
+
 		$data = $this->db->query($sql, [$_GET['start_date'], $_GET['end_date']])->getResultArray();
 		
 		return ['data' => $data, 'total_filtered' => $total_filtered];
