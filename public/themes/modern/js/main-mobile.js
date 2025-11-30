@@ -1339,19 +1339,25 @@ function initPatrolFunctionality() {
 	
 	// Presensi Flash Control Functions
 	function hidePresensiFlashControl(message) {
-		const wrapper = $('#presensi-flash-control-wrapper');
+		if (!$bootbox_presensi || !$bootbox_presensi.length) {
+			return;
+		}
+		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
 		if (!wrapper.length) {
 			return;
 		}
 		wrapper.hide();
 		if (message) {
-			$('#presensi-flash-support-text').text(message);
+			$bootbox_presensi.find('#presensi-flash-support-text').text(message);
 		}
 	}
 	
 	function setupPresensiFlashControl() {
-		const wrapper = $('#presensi-flash-control-wrapper');
-		if (!wrapper.length || !presensiVideoTrack) {
+		if (!$bootbox_presensi || !$bootbox_presensi.length || !presensiVideoTrack) {
+			return;
+		}
+		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
+		if (!wrapper.length) {
 			return;
 		}
 		const capabilities = presensiVideoTrack.getCapabilities ? presensiVideoTrack.getCapabilities() : {};
@@ -1361,13 +1367,16 @@ function initPatrolFunctionality() {
 			return;
 		}
 		wrapper.show();
-		$('#presensi-flash-support-text').text('Sesuaikan lampu saat mengambil foto.');
+		$bootbox_presensi.find('#presensi-flash-support-text').text('Sesuaikan lampu saat mengambil foto.');
 		updatePresensiFlashButtons();
 		applyPresensiFlashMode(presensiFlashMode);
 	}
 	
 	function updatePresensiFlashButtons() {
-		const wrapper = $('#presensi-flash-control-wrapper');
+		if (!$bootbox_presensi || !$bootbox_presensi.length) {
+			return;
+		}
+		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
 		if (!wrapper.length) {
 			return;
 		}
