@@ -66,6 +66,38 @@ class Mobile_activity extends BaseController
 		
 		$activities = $this->model->getActivityByUser($id_user, $start_date, $end_date);
 		
+		// Process foto_activity field for each activity
+		// foto_activity can be:
+		// 1. JSON string: [{"file_name": "activity_123.jpg"}] (new format)
+		// 2. Single filename string: "activity_123.jpg" (old format for backward compatibility)
+		foreach ($activities as $activity) {
+			$activity->foto_activity_images = []; // Array to store processed image file names
+			
+			if (!empty($activity->foto_activity)) {
+				// Debug: log the raw foto_activity value
+				log_message('debug', 'Processing foto_activity: ' . substr($activity->foto_activity, 0, 100));
+				
+				// Try to decode as JSON first (new format)
+				$decoded = json_decode($activity->foto_activity, true);
+				
+				if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+					// It's JSON array - extract file names
+					foreach ($decoded as $photo) {
+						if (isset($photo['file_name']) && !empty($photo['file_name'])) {
+							$activity->foto_activity_images[] = $photo['file_name'];
+						}
+					}
+					log_message('debug', 'Extracted ' . count($activity->foto_activity_images) . ' images from JSON');
+				} else {
+					// It's a single filename string (old format)
+					$activity->foto_activity_images[] = $activity->foto_activity;
+					log_message('debug', 'Using single filename format: ' . $activity->foto_activity);
+				}
+			} else {
+				log_message('debug', 'foto_activity is empty for activity ID: ' . ($activity->id_activity ?? 'unknown'));
+			}
+		}
+		
 		$this->data['activities'] = $activities;
 		
 		echo view('themes/modern/mobile-activity-riwayat.php', $this->data);

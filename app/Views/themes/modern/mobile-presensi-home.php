@@ -30,6 +30,12 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 	if (isset($companies) && !empty($companies)) {
 		log_message('debug', 'mobile-presensi-home: First company id=' . (isset($companies[0]) ? ($companies[0]->id_company ?? 'NO ID') : 'NO FIRST'));
 	}
+	// Initialize $last from $last_presensi at the top level
+	$last = $last_presensi ?? null;
+	// Initialize variables that are used outside the if/else block
+	$is_readonly = false;
+	$active_company_id = null;
+	$active_company_name = '';
 	?>
 	<?php if (empty($companies)): ?>
 		<div class="alert alert-warning shadow-sm border-0 rounded-3">
@@ -55,10 +61,7 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 		</div>
 	<?php else: ?>
 		<?php
-		$last = $last_presensi ?? null;
-		$active_company_id = null;
-		$active_company_name = '';
-		$is_readonly = false;
+		// $last, $is_readonly, $active_company_id, and $active_company_name are already initialized at top level
 		if ($last && is_object($last)) {
 			$last = (array) $last;
 		}

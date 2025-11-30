@@ -465,6 +465,118 @@ $(document).ready(function() {
 	})
 		
 	$bootbox_presensi = '';
+	
+	// Presensi Flash Control Variables (Global scope for access from attachWebcam)
+	var presensiVideoTrack = null;
+	var presensiFlashMode = 'auto';
+	var presensiTorchSupported = false;
+	
+	// Presensi Flash Control Functions (Global scope for access from attachWebcam)
+	function hidePresensiFlashControl(message) {
+		if (!$bootbox_presensi || !$bootbox_presensi.length) {
+			return;
+		}
+		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
+		if (!wrapper.length) {
+			return;
+		}
+		wrapper.hide();
+		if (message) {
+			$bootbox_presensi.find('#presensi-flash-support-text').text(message);
+		}
+	}
+	
+	function setupPresensiFlashControl() {
+		if (!$bootbox_presensi || !$bootbox_presensi.length) {
+			console.warn('setupPresensiFlashControl: bootbox_presensi not available');
+			return;
+		}
+		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
+		if (!wrapper.length) {
+			console.warn('setupPresensiFlashControl: flash control wrapper not found');
+			return;
+		}
+		
+		// Always show the wrapper initially
+		wrapper.show();
+		
+		// Check if video track is available
+		if (!presensiVideoTrack) {
+			console.warn('setupPresensiFlashControl: presensiVideoTrack not available yet');
+			$bootbox_presensi.find('#presensi-flash-support-text').text('Menunggu kamera siap...');
+			// Disable buttons until video track is ready
+			wrapper.find('.flash-toggle-presensi').prop('disabled', true);
+			return;
+		}
+		
+		// Enable buttons
+		wrapper.find('.flash-toggle-presensi').prop('disabled', false);
+		
+		// Check for torch capability with better error handling
+		let capabilities = {};
+		try {
+			if (presensiVideoTrack.getCapabilities) {
+				capabilities = presensiVideoTrack.getCapabilities();
+				console.log('setupPresensiFlashControl: torch capabilities:', capabilities);
+			} else if (presensiVideoTrack.getSettings) {
+				// Fallback to getSettings if getCapabilities is not available
+				const settings = presensiVideoTrack.getSettings();
+				console.log('setupPresensiFlashControl: torch settings:', settings);
+				// Some browsers expose torch in settings
+				if (settings.torch !== undefined) {
+					capabilities.torch = settings.torch;
+				}
+			}
+		} catch (error) {
+			console.warn('setupPresensiFlashControl: Error checking capabilities:', error);
+		}
+		
+		presensiTorchSupported = !!capabilities.torch;
+		console.log('setupPresensiFlashControl: torch supported:', presensiTorchSupported);
+		
+		if (!presensiTorchSupported) {
+			// Show wrapper with message instead of hiding
+			$bootbox_presensi.find('#presensi-flash-support-text').text('Lampu tidak tersedia di perangkat ini.');
+			// Disable buttons if torch not supported
+			wrapper.find('.flash-toggle-presensi').prop('disabled', true);
+			return;
+		}
+		
+		// Torch is supported, show helpful message and enable controls
+		$bootbox_presensi.find('#presensi-flash-support-text').text('Sesuaikan lampu saat mengambil foto.');
+		updatePresensiFlashButtons();
+		applyPresensiFlashMode(presensiFlashMode);
+	}
+	
+	function updatePresensiFlashButtons() {
+		if (!$bootbox_presensi || !$bootbox_presensi.length) {
+			return;
+		}
+		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
+		if (!wrapper.length) {
+			return;
+		}
+		wrapper.find('.flash-toggle-presensi').removeClass('active');
+		wrapper.find(`.flash-toggle-presensi[data-flash-mode="${presensiFlashMode}"]`).addClass('active');
+	}
+	
+	function applyPresensiFlashMode(mode) {
+		if (!presensiVideoTrack || !presensiTorchSupported) {
+			return;
+		}
+		if (mode === 'auto') {
+			presensiVideoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
+			return;
+		}
+		const torchOn = mode === 'on';
+		presensiVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(err => {
+			console.warn('Failed to set presensi torch:', err);
+			if (typeof Swal !== 'undefined') {
+				Swal.fire('Info', 'Tidak dapat mengubah lampu di perangkat ini.', 'info');
+			}
+		});
+	}
+	
 	function presensi(jenis_presensi) {
 		
 		// Check if today is a working day
@@ -820,7 +932,7 @@ $(document).ready(function() {
 		
 		if (setting.gunakan_foto_selfi == 'Y') {
 			
-			$('#video-container, #btn-ambil-foto').show();
+			$('#video-container, #btn-ambil-foto, #presensi-flash-control-wrapper').show();
 			
 			$btn_close = $('<button type="button" class="bootbox-close-button btn-close" aria-hidden="true" style="position: absolute;right: 10px;top: 10px;z-index:99999"></button>')
 			$bootbox_presensi.find('.modal-content').prepend($btn_close);
@@ -869,6 +981,11 @@ $(document).ready(function() {
 			
 			// Store video track for flash control
 			presensiVideoTrack = stream.getVideoTracks()[0];
+			console.log('attachWebcam: presensiVideoTrack set, attempting to setup flash control');
+			
+			// Try to setup flash control immediately after getting the track
+			// This ensures it's available as soon as possible
+			setupPresensiFlashControl();
 			
 			video = document.getElementById("video");
 			video.srcObject  = stream;
@@ -1220,6 +1337,9 @@ function initPatrolFunctionality() {
 	let presensiFlashMode = 'auto';
 	let presensiTorchSupported = false;
 	let presensiVideoTrack = null;
+	
+	// QR Scanner timing metrics
+	let qrScannerStartTime = null;
 	let defaultQrStatusHtml = `
 		<div class="alert alert-info mb-0">
 			<i class="fas fa-search me-2"></i>
@@ -1337,69 +1457,8 @@ function initPatrolFunctionality() {
 		});
 	}
 	
-	// Presensi Flash Control Functions
-	function hidePresensiFlashControl(message) {
-		if (!$bootbox_presensi || !$bootbox_presensi.length) {
-			return;
-		}
-		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
-		if (!wrapper.length) {
-			return;
-		}
-		wrapper.hide();
-		if (message) {
-			$bootbox_presensi.find('#presensi-flash-support-text').text(message);
-		}
-	}
-	
-	function setupPresensiFlashControl() {
-		if (!$bootbox_presensi || !$bootbox_presensi.length || !presensiVideoTrack) {
-			return;
-		}
-		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
-		if (!wrapper.length) {
-			return;
-		}
-		const capabilities = presensiVideoTrack.getCapabilities ? presensiVideoTrack.getCapabilities() : {};
-		presensiTorchSupported = !!capabilities.torch;
-		if (!presensiTorchSupported) {
-			hidePresensiFlashControl('Lampu tidak tersedia di perangkat ini.');
-			return;
-		}
-		wrapper.show();
-		$bootbox_presensi.find('#presensi-flash-support-text').text('Sesuaikan lampu saat mengambil foto.');
-		updatePresensiFlashButtons();
-		applyPresensiFlashMode(presensiFlashMode);
-	}
-	
-	function updatePresensiFlashButtons() {
-		if (!$bootbox_presensi || !$bootbox_presensi.length) {
-			return;
-		}
-		const wrapper = $bootbox_presensi.find('#presensi-flash-control-wrapper');
-		if (!wrapper.length) {
-			return;
-		}
-		wrapper.find('.flash-toggle-presensi').removeClass('active');
-		wrapper.find(`.flash-toggle-presensi[data-flash-mode="${presensiFlashMode}"]`).addClass('active');
-	}
-	
-	function applyPresensiFlashMode(mode) {
-		if (!presensiVideoTrack || !presensiTorchSupported) {
-			return;
-		}
-		if (mode === 'auto') {
-			presensiVideoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
-			return;
-		}
-		const torchOn = mode === 'on';
-		presensiVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(err => {
-			console.warn('Failed to set presensi torch:', err);
-			if (typeof Swal !== 'undefined') {
-				Swal.fire('Info', 'Tidak dapat mengubah lampu di perangkat ini.', 'info');
-			}
-		});
-	}
+	// Presensi Flash Control Functions (moved to global scope above, keeping reference here for compatibility)
+	// Functions are now defined globally before initPatrolFunctionality() to be accessible from attachWebcam()
 	
 	function storePatrolOptionsForCompany(companyId, patrols) {
 		if (!companyId) {
@@ -1608,6 +1667,7 @@ function initPatrolFunctionality() {
 	}
 
 	function markPatrolAsScanned(patrolId, options) {
+		console.log('[QR DEBUG] markPatrolAsScanned called for patrol ID:', patrolId);
 		if (!patrolId) {
 			return;
 		}
@@ -1639,6 +1699,8 @@ function initPatrolFunctionality() {
 		}
 		patrolStatusMap[patrolId].status = 'completed';
 		patrolStatusMap[patrolId].last_scan = timestamp;
+		console.log('[QR DEBUG] Patrol marked as completed. Updated status:', JSON.stringify(patrolStatusMap[patrolId]));
+		console.log('[QR DEBUG] Note: This does NOT prevent re-scanning. Old QR codes can still be used.');
 		renderPatrolStatusTable();
 		if (selectedPatrolId == patrolId) {
 			updatePatrolDetailCard(patrolId);
@@ -1695,16 +1757,25 @@ function initPatrolFunctionality() {
 	}
 	
 	function findPatrolByBarcode(barcode) {
+		console.log('[QR DEBUG] findPatrolByBarcode called with barcode:', barcode);
+		
 		if (!barcode || !patrolOptions || !patrolOptions.length) {
+			console.log('[QR DEBUG] findPatrolByBarcode: Invalid input - barcode:', barcode, 'patrolOptions length:', patrolOptions ? patrolOptions.length : 0);
 			return null;
 		}
 		const target = String(barcode).trim().toLowerCase();
+		console.log('[QR DEBUG] findPatrolByBarcode: Searching for normalized barcode:', target);
 		
 		const result = patrolOptions.find(function(patrol) {
 			const patrolBarcode = String(patrol.barcode || '').trim().toLowerCase();
-			return patrolBarcode === target;
+			const matches = patrolBarcode === target;
+			if (matches) {
+				console.log('[QR DEBUG] findPatrolByBarcode: Match found!', patrol);
+			}
+			return matches;
 		}) || null;
 		
+		console.log('[QR DEBUG] findPatrolByBarcode result:', result ? result.nama_patrol : 'null');
 		return result;
 	}
 	
@@ -1802,6 +1873,9 @@ function initPatrolFunctionality() {
 	}
 
 	function stopQRScanner() {
+		// Reset timing metrics when scanner stops
+		qrScannerStartTime = null;
+		
 		return new Promise(resolve => {
 			try {
 				if (!qrScanner) {
@@ -2174,8 +2248,12 @@ function initPatrolFunctionality() {
 	}
 	
 	// QR Scanner functionality
-	$('#btn-start-inline-qr').click(function() {
+	// "Buka Kamera" button click handler - start QR scanner
+	$('#btn-start-inline-qr').off('click').on('click', function() {
+		console.log('[QR DEBUG] ========== Buka Kamera button clicked ==========');
+		
 		if (!currentCompanyId) {
+			console.log('[QR DEBUG] Company ID not set');
 			Swal.fire('Error', 'Company belum terdeteksi. Pastikan GPS aktif dan Anda berada di lokasi company.', 'error');
 			return;
 		}
@@ -2189,7 +2267,56 @@ function initPatrolFunctionality() {
 		}
 		// If forcedScannerTargetId is set, keep it - user selected a specific patrol
 		
-		ensureInlineScanner(true);
+		// Check camera permissions first
+		if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+			console.log('[QR DEBUG] Camera API available, checking permissions...');
+			
+			// Test camera access
+			navigator.mediaDevices.getUserMedia({ video: true })
+				.then(function(stream) {
+					// Permission granted - stop test stream and start scanner
+					stream.getTracks().forEach(track => track.stop());
+					console.log('[QR DEBUG] Camera permission granted, ensuring inline scanner and starting...');
+					ensureInlineScanner(true);
+				})
+				.catch(function(error) {
+					console.error('[QR DEBUG] Camera permission error:', error);
+					let errorMsg = 'Tidak dapat mengakses kamera. ';
+					if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+						errorMsg = 'Izin kamera ditolak. Silakan aktifkan izin kamera di pengaturan browser.';
+					} else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+						errorMsg = 'Kamera tidak ditemukan di perangkat ini.';
+					} else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+						errorMsg = 'Kamera sedang digunakan oleh aplikasi lain.';
+					} else {
+						errorMsg += 'Error: ' + error.message;
+					}
+					
+					Swal.fire({
+						icon: 'error',
+						title: 'Error Kamera',
+						html: errorMsg + '<br><br><small>Pastikan:<br>1. Izin kamera sudah diberikan<br>2. Menggunakan HTTPS atau localhost<br>3. Browser mendukung kamera</small>',
+						confirmButtonText: 'OK'
+					});
+					
+					$('#qr-scanning-status').html(`
+						<div class="alert alert-danger">
+							<i class="fas fa-exclamation-triangle me-2"></i>
+							<strong>Kamera tidak dapat diakses</strong>
+							<br>
+							<small>${errorMsg}</small>
+						</div>
+					`);
+				});
+		} else {
+			console.error('[QR DEBUG] Camera API not supported');
+			Swal.fire({
+				icon: 'error',
+				title: 'Browser Tidak Mendukung',
+				text: 'Browser Anda tidak mendukung akses kamera. Silakan gunakan browser modern seperti Chrome atau Firefox.',
+				confirmButtonText: 'OK'
+			});
+		}
 	});
 
 	$('#btn-retry-inline-qr').click(function() {
@@ -2303,6 +2430,11 @@ function initPatrolFunctionality() {
 		cameraStatusText.addClass(cls).text(message);
 	}
 
+	// Manual QR entry button handler
+	$(document).on('click', '#btn-manual-qr-input', function() {
+		showManualQREntry();
+	});
+	
 	$('#btn-manual-validation').click(function() {
 		if (!currentCompanyId) {
 			Swal.fire('Error', 'Company belum terdeteksi. Pastikan GPS aktif dan Anda berada di lokasi company.', 'error');
@@ -2441,6 +2573,35 @@ function initPatrolFunctionality() {
 	
 	// Start QR scanner
 	function startQRScanner() {
+		// Validate that company and patrol options are loaded before starting scanner
+		if (!currentCompanyId) {
+			console.log('[QR DEBUG] Cannot start scanner: Company ID not set');
+			if (typeof Swal !== 'undefined') {
+				Swal.fire({
+					icon: 'warning',
+					title: 'Company Belum Terdeteksi',
+					text: 'Pastikan GPS aktif atau pilih company secara manual terlebih dahulu.',
+					confirmButtonText: 'OK'
+				});
+			}
+			return Promise.reject('Company ID not set');
+		}
+		
+		if (!patrolOptions || patrolOptions.length === 0) {
+			console.log('[QR DEBUG] Cannot start scanner: No patrol options available');
+			if (typeof Swal !== 'undefined') {
+				Swal.fire({
+					icon: 'warning',
+					title: 'Data Patrol Tidak Tersedia',
+					text: 'Data patrol belum tersedia untuk company ini. Silakan hubungi admin.',
+					confirmButtonText: 'OK'
+				});
+			}
+			return Promise.reject('No patrol options available');
+		}
+		
+		console.log('[QR DEBUG] Starting QR scanner - Company ID:', currentCompanyId, 'Patrol options:', patrolOptions.length);
+		
 		// Check if Html5Qrcode is available
 		if (typeof Html5Qrcode === 'undefined') {
 			console.error('Html5Qrcode library not loaded');
@@ -2449,18 +2610,26 @@ function initPatrolFunctionality() {
 		}
 		
 		// Check if qr-reader element exists
-		const qrReaderElement = document.getElementById('qr-reader');
-		if (!qrReaderElement) {
+		let qrReaderElementCheck = document.getElementById('qr-reader');
+		if (!qrReaderElementCheck) {
 			console.error('qr-reader element not found');
 			Swal.fire('Error', 'Elemen scanner tidak ditemukan', 'error');
 			return;
 		}
 		
 		// Clear the element before starting
-		qrReaderElement.innerHTML = '';
+		qrReaderElementCheck.innerHTML = '';
 		
 		// Check if scanner is already running
-		if (qrScanner && qrScanner.isScanning && qrScanner.isScanning()) {
+		let isScanning = false;
+		if (qrScanner) {
+			if (typeof qrScanner.isScanning === 'function') {
+				isScanning = qrScanner.isScanning();
+			} else if (qrScanner.isScanning === true) {
+				isScanning = true;
+			}
+		}
+		if (isScanning) {
 			return;
 		}
 		
@@ -2477,12 +2646,13 @@ function initPatrolFunctionality() {
 		const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 		
 		const config = {
-			fps: isMobile ? 10 : 30, // Lower FPS on mobile for better performance
+			fps: isMobile ? 30 : 30, // Increased to 30 FPS for faster detection (1-2 second target)
 			qrbox: function(viewfinderWidth, viewfinderHeight) {
-				// Use 80% of viewfinder on mobile, 250px on desktop
-				const minEdgePercentage = isMobile ? 0.8 : 0.3;
+				// Use 90% of viewfinder on mobile for better detection, 50% on desktop
+				const minEdgePercentage = isMobile ? 0.9 : 0.5;
 				const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
 				const qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
+				console.log('[QR DEBUG] QR box size:', qrboxSize, 'from viewfinder:', viewfinderWidth, 'x', viewfinderHeight);
 				return {
 					width: qrboxSize,
 					height: qrboxSize
@@ -2490,12 +2660,12 @@ function initPatrolFunctionality() {
 			},
 			aspectRatio: 1.0,
 			rememberLastUsedCamera: true,
-			supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
+			supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA], // Real-time camera scanning only
 			showTorchButtonIfSupported: true,
 			showZoomSliderIfSupported: !isMobile, // Disable zoom slider on mobile
 			defaultZoomValueIfSupported: isMobile ? 1 : 2,
 			useBarCodeDetectorIfSupported: true,
-			verbose: true, // Enable verbose logging
+			verbose: false, // Disable verbose logging for better performance
 			videoConstraints: isMobile ? {
 				facingMode: "environment",
 				width: { ideal: 1280 },
@@ -2503,19 +2673,39 @@ function initPatrolFunctionality() {
 			} : undefined
 		};
 		
-		// Add manual capture button for when auto-decode fails
-		let manualCaptureInterval = null;
-		let lastCaptureTime = 0;
+		// Real-time scanning - no manual capture needed
+		// QR codes are detected automatically while in viewfinder
+		console.log('[QR DEBUG] Creating Html5Qrcode instance for element: qr-reader');
+		const qrReaderElement = document.getElementById('qr-reader');
+		if (!qrReaderElement) {
+			console.error('[QR DEBUG] ERROR: qr-reader element not found!');
+			Swal.fire('Error', 'Elemen scanner tidak ditemukan', 'error');
+			return Promise.reject('qr-reader element not found');
+		}
+		console.log('[QR DEBUG] qr-reader element found:', qrReaderElement);
 		
 		qrScanner = new Html5Qrcode("qr-reader");
+		console.log('[QR DEBUG] Html5Qrcode instance created:', qrScanner);
 		
 		// Wrap callbacks to ensure they're called
 		const wrappedOnScanSuccess = function(decodedText, decodedResult) {
+			console.log('[QR DEBUG] wrappedOnScanSuccess called with:', decodedText);
 			onScanSuccess(decodedText, decodedResult);
 		};
 		
 		const wrappedOnScanFailure = function(error) {
-			// Don't log failures - they're too noisy during normal scanning
+			// onScanFailure is called VERY frequently during normal scanning
+			// (every frame that doesn't contain a QR code - potentially 30+ times per second)
+			// This is EXPECTED behavior - failures mean "no QR code in this frame", not an error
+			// Only suppress logging - don't treat as actual errors
+			// Log first few failures to verify callback is working
+			if (!wrappedOnScanFailure.callCount) {
+				wrappedOnScanFailure.callCount = 0;
+			}
+			wrappedOnScanFailure.callCount++;
+			if (wrappedOnScanFailure.callCount <= 3) {
+				console.log('[QR DEBUG] wrappedOnScanFailure called (this is normal - means no QR in frame):', wrappedOnScanFailure.callCount);
+			}
 			onScanFailure(error);
 		};
 		
@@ -2578,28 +2768,91 @@ function initPatrolFunctionality() {
 				</div>
 			`);
 			
+			// Record scanner start time for timing metrics
+			qrScannerStartTime = Date.now();
+			console.log('[QR TIMING] Scanner started at:', new Date(qrScannerStartTime).toISOString());
+			
+			console.log('[QR DEBUG] Starting scanner with config:', {
+				cameraConfig: cameraConfig,
+				fps: config.fps,
+				qrbox: typeof config.qrbox === 'function' ? 'function' : config.qrbox,
+				verbose: config.verbose
+			});
+			
 			qrScanner.start(
 				cameraConfig,
 				config,
 				wrappedOnScanSuccess,
 				wrappedOnScanFailure
 			).then(() => {
+				console.log('[QR DEBUG] Scanner start() promise resolved - scanner should be running');
+				
+				// Verify video element was created
+				setTimeout(() => {
+					const qrReaderElement = document.getElementById('qr-reader');
+					if (qrReaderElement) {
+						const video = qrReaderElement.querySelector('video');
+						console.log('[QR DEBUG] Video element check:', {
+							videoExists: !!video,
+							videoSrcObject: video ? !!video.srcObject : false,
+							videoReadyState: video ? video.readyState : 'N/A',
+							videoPlaying: video ? !video.paused : false
+						});
+						
+						if (!video) {
+							console.error('[QR DEBUG] ERROR: Video element not found in qr-reader!');
+							$('#qr-scanning-status').html(`
+								<div class="alert alert-danger">
+									<i class="fas fa-exclamation-triangle me-2"></i>
+									<strong>Video tidak ditemukan</strong>
+									<br>
+									<small>Scanner mungkin tidak berfungsi dengan benar.</small>
+								</div>
+							`);
+						} else if (!video.srcObject) {
+							console.warn('[QR DEBUG] WARNING: Video element exists but has no srcObject');
+						} else {
+							console.log('[QR DEBUG] Video element looks good - scanner should be working');
+						}
+					}
+				}, 500);
+				
+				// Verify scanner is actually running
+				setTimeout(() => {
+					let isRunning = false;
+					if (qrScanner) {
+						if (typeof qrScanner.isScanning === 'function') {
+							isRunning = qrScanner.isScanning();
+						} else if (qrScanner.isScanning === true) {
+							isRunning = true;
+						}
+					}
+					console.log('[QR DEBUG] Scanner running status:', isRunning);
+					
+					if (!isRunning) {
+						console.warn('[QR DEBUG] Scanner reported as not running after start');
+						$('#qr-scanning-status').html(`
+							<div class="alert alert-warning">
+								<i class="fas fa-exclamation-triangle me-2"></i>
+								<strong>Scanner mungkin tidak aktif</strong>
+								<br>
+								<small>Silakan coba klik "Buka Kamera" lagi atau refresh halaman.</small>
+							</div>
+						`);
+					} else {
+						console.log('[QR DEBUG] Scanner is confirmed running - QR detection should work');
+					}
+				}, 1000);
+				
 				// Hide loading, show scanning message
 				$('#qr-scanning-status').html(`
 					<div class="alert alert-success">
 						<i class="fas fa-camera me-2"></i>
-						<strong>Kamera aktif!</strong>
+						<strong>Kamera aktif - Memindai secara real-time</strong>
 						<br>
-						<small>Arahkan kamera ke QR code patrol</small>
+						<small>Arahkan kamera ke QR code patrol. QR akan terdeteksi otomatis saat berada di dalam kotak pemindaian.</small>
 						<br>
-						<small class="text-muted">Klik tombol di bawah untuk capture QR code</small>
-					</div>
-					<div class="text-center mt-2">
-					<!--
-						<button type="button" class="btn btn-warning btn-sm" id="btn-manual-capture-qr">
-							<i class="fas fa-camera me-2"></i>Capture QR Code
-						</button>
-					-->
+						<small class="text-muted">Memindai setiap detik...</small>
 					</div>
 				`);
 				
@@ -2614,25 +2867,62 @@ function initPatrolFunctionality() {
 							if (tracks.length > 0) {
 								qrScannerVideoTrack = tracks[0];
 								setupQRScannerFlashControl();
+								console.log('[QR DEBUG] Video track obtained for flash control');
+							} else {
+								console.warn('[QR DEBUG] No video tracks found');
 							}
+						} else {
+							console.warn('[QR DEBUG] Video element or srcObject not found');
 						}
+					} else {
+						console.warn('[QR DEBUG] qr-reader element not found');
 					}
 				}, 500); // Small delay to ensure video element is ready
 				
-				// Add manual capture button handler
-				$('#btn-manual-capture-qr').off('click').on('click', function() {
-					captureAndDecodeQR();
-				});
+				// Real-time detection enabled - QR codes detected automatically
+				// No manual capture needed - scanner detects QR codes continuously while in viewfinder
 			}).catch(err => {
-				console.error('Camera start error:', err);
+				console.error('[QR DEBUG] Camera start error:', err);
+				console.error('[QR DEBUG] Error details:', {
+					name: err.name,
+					message: err.message,
+					stack: err.stack
+				});
+				
 				// Clean up failed scanner attempt
 				if (qrScanner) {
 					try {
 						qrScanner.clear();
 					} catch (e) {
-						// Ignore cleanup errors
+						console.warn('[QR DEBUG] Error clearing scanner:', e);
 					}
 				}
+				
+				// Show detailed error message
+				let errorMsg = 'Gagal mengakses kamera. ';
+				if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+					errorMsg = 'Izin kamera ditolak. Silakan aktifkan izin kamera di pengaturan browser.';
+				} else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+					errorMsg = 'Kamera tidak ditemukan di perangkat ini.';
+				} else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+					errorMsg = 'Kamera sedang digunakan oleh aplikasi lain.';
+				} else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+					errorMsg = 'Konfigurasi kamera tidak didukung. Mencoba konfigurasi lain...';
+				} else {
+					errorMsg += 'Error: ' + (err.message || err.toString());
+				}
+				
+				$('#qr-scanning-status').html(`
+					<div class="alert alert-warning">
+						<i class="fas fa-spinner fa-spin me-2"></i>
+						<strong>Mencoba konfigurasi kamera lain...</strong>
+						<br>
+						<small>${errorMsg}</small>
+						<br>
+						<small>Mencoba konfigurasi ${currentConfigIndex + 1}/${cameraConfigs.length}</small>
+					</div>
+				`);
+				
 				currentConfigIndex++;
 				// Try next config after a short delay
 				setTimeout(() => {
@@ -2651,7 +2941,7 @@ function initPatrolFunctionality() {
 		let squareDetectedCount = 0;
 		
 		const checkInterval = setInterval(function() {
-			if (!qrScanner || !qrScanner.isScanning || !qrScanner.isScanning()) {
+			if (!isScannerRunning()) {
 				clearInterval(checkInterval);
 				return;
 			}
@@ -2897,56 +3187,89 @@ function initPatrolFunctionality() {
 		}, 'image/jpeg', 0.95);
 	}
 	
-	// QR scan success
+	// QR scan success - WhatsApp-like behavior: auto-process without confirmation
 	function onScanSuccess(decodedText, decodedResult) {
-		// Show immediate feedback
+		// Calculate detection time
+		const detectionTime = qrScannerStartTime ? ((Date.now() - qrScannerStartTime) / 1000).toFixed(2) : null;
+		
+		console.log('[QR SUCCESS] ========== QR CODE DETECTED ==========');
+		console.log('[QR SUCCESS] Decoded text:', decodedText);
+		console.log('[QR SUCCESS] Detection time:', detectionTime !== null ? detectionTime + ' seconds' : 'N/A');
+		console.log('[QR SUCCESS] Company ID:', currentCompanyId);
+		console.log('[QR SUCCESS] Patrol options:', patrolOptions ? patrolOptions.length : 0);
+		
+		const scannerRunning = isScannerRunning();
+		if (!scannerRunning) {
+			console.warn('[QR SUCCESS] WARNING: Scanner not running when QR detected!');
+		}
+		
+		// Show immediate feedback without stopping scanner
+		const timingInfo = detectionTime !== null 
+			? `<br><small class="text-muted">Ditemukan dalam ${detectionTime} detik</small>`
+			: '';
+		
 		$('#qr-scanning-status').html(`
-			<div class="alert alert-warning">
+			<div class="alert alert-info">
 				<i class="fas fa-spinner fa-spin me-2"></i>
 				<strong>QR Code terdeteksi!</strong>
 				<br>
-				<small>Memvalidasi dengan server...</small>
+				<small>Memvalidasi...</small>
+				${timingInfo}
 			</div>
 		`);
 		
-		// Stop scanner safely - wrapped in try-catch for safety
-		try {
-			if (qrScanner && qrScanner.isScanning && qrScanner.isScanning()) {
-				qrScanner.stop().then(() => {
-					try {
-						qrScanner.clear();
-					} catch(e) {
-						// Error clearing scanner - silently fail
-					}
-				}).catch(err => {
-					// Error stopping scanner - silently fail
-				});
-			}
-		} catch(e) {
-			// Error in scanner stop - silently fail
-		}
-		
-		// Handle detection on client-side
-		handlePatrolDetection(decodedText);
+		// Process immediately without confirmation (like WhatsApp)
+		// Only stop scanner if QR is successfully processed
+		handlePatrolDetection(decodedText, { autoProcess: true, detectionTime: detectionTime });
 	}
 	
 	// QR scan failure
+	// NOTE: This is called VERY frequently (30+ times per second) during normal scanning
+	// It's called every time the scanner processes a frame and doesn't find a QR code
+	// This is EXPECTED and NORMAL - it does NOT mean there's an error
+	// Only actual errors (camera issues, etc.) should be logged
 	function onScanFailure(error) {
-		// Suppress all error logs - they're expected during scanning
-		// Auto-capture disabled - user must click button manually
+		// Completely suppress failure logs - they're too noisy and confusing
+		// Failures during scanning are expected (means "no QR code in this frame")
+		// Only log if it's an actual error (not just "QR code not found")
+		const errorMessage = error ? error.toString() : '';
+		const isActualError = errorMessage && (
+			errorMessage.includes('camera') ||
+			errorMessage.includes('permission') ||
+			errorMessage.includes('device') ||
+			errorMessage.includes('stream') ||
+			errorMessage.includes('NotAllowedError') ||
+			errorMessage.includes('NotFoundError') ||
+			errorMessage.includes('NotReadableError')
+		);
+		
+		// Only log actual errors, not "QR code not found" messages
+		if (isActualError) {
+			console.warn('[QR DEBUG] Actual scanner error:', error);
+		}
+		// Otherwise, silently ignore - this is normal scanning behavior
 	}
 	
 	function handlePatrolDetection(barcode, options = {}) {
+		console.log('[QR DEBUG] handlePatrolDetection called');
+		console.log('[QR DEBUG] Barcode:', barcode);
+		console.log('[QR DEBUG] Options:', options);
+		
 		const isTestMode = options.isTest === true;
 		const manualTrigger = options.manualTrigger === true;
+		const autoProcess = options.autoProcess === true; // Auto-process without confirmation (WhatsApp-like)
 		
 		// PRIORITY: If forcedScannerTargetId is set (user clicked a scan button), ALWAYS use it
 		// This ensures user's choice (e.g., patrol 18) is respected, regardless of scanned barcode
 		const buttonClicked = forcedScannerTargetId && forcedScannerTargetId !== null && forcedScannerTargetId !== '';
 		
+		console.log('[QR DEBUG] Button clicked:', buttonClicked, 'Forced ID:', forcedScannerTargetId);
+		console.log('[QR DEBUG] Manual trigger:', manualTrigger);
+		
 		// If button clicked OR manual trigger: completely bypass ALL QR validation
 		// Use the selected patrol ID directly, ignore any scanned barcode
 		if (buttonClicked || manualTrigger) {
+			console.log('[QR DEBUG] Using button/manual trigger path');
 			// Get the patrol ID to use - ALWAYS use forcedScannerTargetId if it's set
 			const patrolIdToUse = buttonClicked ? String(forcedScannerTargetId) : (manualTrigger && forcedScannerTargetId ? String(forcedScannerTargetId) : null);
 			
@@ -3026,33 +3349,103 @@ function initPatrolFunctionality() {
 		}
 		
 		// Normal flow (no button clicked, no forcedScannerTargetId): validate barcode and match to patrol
+		console.log('[QR DEBUG] Using normal QR validation path');
+		
 		if (!barcode) {
+			console.log('[QR DEBUG] ERROR: Barcode is empty');
 			Swal.fire('Info', 'Barcode tidak tersedia. Silakan lakukan scan ulang.', 'info');
 			restartScannerWithDelay();
 			return;
 		}
 		
 		if (!currentCompanyId) {
-			Swal.fire('Error', 'Company belum terdeteksi. Pastikan GPS aktif dan Anda berada di lokasi company.', 'error');
+			console.log('[QR DEBUG] ERROR: Current company ID is not set');
+			Swal.fire({
+				icon: 'error',
+				title: 'Company Belum Terdeteksi',
+				text: 'Pastikan GPS aktif dan Anda berada di lokasi company, atau pilih company secara manual.',
+				confirmButtonText: 'OK'
+			});
 			return;
 		}
 		
 		if (!patrolOptions || patrolOptions.length === 0) {
-			Swal.fire('Info', 'Data patrol belum tersedia untuk company ini.', 'info');
+			console.log('[QR DEBUG] ERROR: No patrol options available');
+			Swal.fire({
+				icon: 'info',
+				title: 'Data Patrol Tidak Tersedia',
+				text: 'Data patrol belum tersedia untuk company ini. Silakan hubungi admin.',
+				confirmButtonText: 'OK'
+			});
 			restartScannerWithDelay();
 			return;
 		}
 		
+		console.log('[QR DEBUG] Searching for patrol with barcode:', barcode);
+		console.log('[QR DEBUG] Available patrols:', patrolOptions.map(p => ({ id: p.id_patrol, barcode: p.barcode, nama: p.nama_patrol })));
+		
 		const matchedPatrol = findPatrolByBarcode(barcode);
 		
+		console.log('[QR DEBUG] Matched patrol:', matchedPatrol);
+		
 		if (!matchedPatrol) {
+			console.log('[QR DEBUG] ERROR: No patrol found matching barcode');
+			
+			// Build list of available barcodes for debugging
+			const availableBarcodes = patrolOptions.map(p => p.barcode || '(no barcode)').filter(b => b !== '(no barcode)');
+			const availableBarcodesList = availableBarcodes.length > 0 
+				? availableBarcodes.slice(0, 10).join(', ') + (availableBarcodes.length > 10 ? '...' : '')
+				: 'Tidak ada barcode tersedia';
+			
+			console.log('[QR DEBUG] Scanned barcode:', barcode);
+			console.log('[QR DEBUG] Available barcodes:', availableBarcodes);
+			
 			Swal.fire({
 				icon: 'error',
-				title: 'QR Tidak Valid',
-				text: 'QR Code tidak dikenali untuk company ini.'
+				title: 'QR Code Tidak Dikenali',
+				html: `
+					<div class="text-start">
+						<p><strong>Barcode yang di-scan:</strong></p>
+						<p class="mb-2"><code style="background: #f8f9fa; padding: 4px 8px; border-radius: 4px;">${barcode}</code></p>
+						<p class="mb-2"><strong>Barcode yang tersedia:</strong></p>
+						<p class="small text-muted mb-3">${availableBarcodesList}</p>
+						<p class="small text-muted">QR Code ini tidak cocok dengan data patrol untuk company ini. Pastikan QR code yang digunakan sesuai dengan company yang terdeteksi.</p>
+					</div>
+				`,
+				confirmButtonText: 'OK',
+				footer: '<button type="button" class="btn btn-link text-primary p-0" id="btn-manual-qr-entry">Masukkan QR Code Manual</button>'
+			}).then(() => {
+				restartScannerWithDelay();
 			});
-			restartScannerWithDelay();
+			
+			// Add click handler for manual entry button
+			setTimeout(() => {
+				$('#btn-manual-qr-entry').on('click', function() {
+					Swal.close();
+					showManualQREntry();
+				});
+			}, 100);
+			
 			return;
+		}
+		
+		console.log('[QR DEBUG] Patrol matched successfully:', matchedPatrol.nama_patrol, 'ID:', matchedPatrol.id_patrol);
+		
+		// Stop scanner only when QR is successfully matched (WhatsApp-like behavior)
+		try {
+			if (isScannerRunning()) {
+				qrScanner.stop().then(() => {
+					try {
+						qrScanner.clear();
+					} catch(e) {
+						console.warn('[QR DEBUG] Error clearing scanner:', e);
+					}
+				}).catch(err => {
+					console.warn('[QR DEBUG] Error stopping scanner:', err);
+				});
+			}
+		} catch(e) {
+			console.warn('[QR DEBUG] Error in scanner stop:', e);
 		}
 		
 		// Free scan (no button clicked): use normal QR matching
@@ -3087,6 +3480,21 @@ function initPatrolFunctionality() {
 		markPatrolAsScanned(matchedPatrol.id_patrol);
 		setNextPatrolInfo(getNextPendingPatrol());
 		
+		// Show success status with timing info
+		const timingDisplay = detectionTime !== null 
+			? `<br><small class="text-muted">Ditemukan dalam ${detectionTime} detik</small>`
+			: '';
+		
+		$('#qr-scanning-status').html(`
+			<div class="alert alert-success">
+				<i class="fas fa-check-circle me-2"></i>
+				<strong>QR Code Berhasil!</strong>
+				<br>
+				<small>${matchedPatrol.nama_patrol}</small>
+				${timingDisplay}
+			</div>
+		`);
+		
 		setTimeout(() => {
 			showStep(2);
 			// Ensure text is a string
@@ -3098,9 +3506,50 @@ function initPatrolFunctionality() {
 				title: isTestMode ? 'QR Terdeteksi' : 'QR Terdeteksi',
 				text: matchedPatrolName,
 				timer: 1500,
-				showConfirmButton: false
+				showConfirmButton: false,
+				toast: true,
+				position: 'top-end'
 			});
 		}, 200);
+	}
+	
+	// Manual QR code entry function
+	function showManualQREntry() {
+		if (typeof Swal === 'undefined') {
+			alert('Silakan masukkan QR code secara manual melalui input field.');
+			return;
+		}
+		
+		Swal.fire({
+			title: 'Masukkan QR Code Manual',
+			html: `
+				<div class="text-start">
+					<p class="mb-3">Masukkan barcode QR code secara manual:</p>
+					<input type="text" class="form-control" id="manual-qr-input" placeholder="Contoh: PATROL-001" autofocus>
+					<small class="text-muted d-block mt-2">Masukkan barcode yang tertera pada QR code Anda.</small>
+				</div>
+			`,
+			showCancelButton: true,
+			confirmButtonText: 'Gunakan',
+			cancelButtonText: 'Batal',
+			confirmButtonColor: '#0d6efd',
+			cancelButtonColor: '#6c757d',
+			preConfirm: () => {
+				const input = document.getElementById('manual-qr-input');
+				const value = input ? input.value.trim() : '';
+				if (!value) {
+					Swal.showValidationMessage('Barcode tidak boleh kosong');
+					return false;
+				}
+				return value;
+			}
+		}).then((result) => {
+			if (result.isConfirmed && result.value) {
+				console.log('[QR DEBUG] Manual QR entry:', result.value);
+				// Process the manually entered QR code
+				handlePatrolDetection(result.value, { manualTrigger: false });
+			}
+		});
 	}
 	
 	// Helper function to reset scanner UI

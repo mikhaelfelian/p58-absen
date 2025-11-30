@@ -272,6 +272,11 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 				<input type="hidden" id="id_company" name="id_company" value="">
 				<input type="hidden" id="detected-latitude" value="">
 				<input type="hidden" id="detected-longitude" value="">
+				<input type="hidden" id="selected-company-id" value="" />
+				<input type="hidden" id="selected-company-lat" value="" />
+				<input type="hidden" id="selected-company-lng" value="" />
+				<input type="hidden" id="selected-company-radius" value="" />
+				<input type="hidden" id="selected-company-satuan" value="" />
 			</div>
 
 			<div id="next-patrol-info" class="alert alert-info mb-3" style="display:none;">
@@ -381,7 +386,14 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 						</button>
 					</div>
 				</div>
-				<div class="text-muted small mt-2">Gunakan “Validasi Manual” jika QR sulit terbaca.</div>
+				<div class="row mt-2 g-2">
+					<div class="col-12">
+						<button type="button" class="btn btn-outline-info btn-sm w-100" id="btn-manual-qr-input">
+							<i class="fas fa-keyboard me-2"></i>Masukkan QR Code Manual
+						</button>
+					</div>
+				</div>
+				<div class="text-muted small mt-2">Gunakan "Validasi Manual" jika QR sulit terbaca, atau "Masukkan QR Code Manual" untuk memasukkan barcode secara manual.</div>
 			</div>
 
 			<div id="qr-scan-result" class="mt-3" style="display:none;">
@@ -698,6 +710,212 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 			});
 		});
 	});
+	
+	// GPS Detection for Company Location (Auto-detect)
+	(function() {
+		function getDistance(lat1, lon1, lat2, lon2) {
+			const R = 6371; // Earth's radius in kilometers
+			const dLat = (lat2 - lat1) * Math.PI / 180;
+			const dLon = (lon2 - lon1) * Math.PI / 180;
+			const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+				Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+				Math.sin(dLon / 2) * Math.sin(dLon / 2);
+			const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+			return R * c;
+		}
+		
+		function findNearestCompany(userLat, userLon) {
+			if (typeof assignedCompanies === 'undefined' || !assignedCompanies || !Array.isArray(assignedCompanies)) {
+				return null;
+			}
+			
+			let nearestCompany = null;
+			let minDistance = Infinity;
+			
+			for (let i = 0; i < assignedCompanies.length; i++) {
+				const company = assignedCompanies[i];
+				if (!company.latitude || !company.longitude) {
+					continue;
+				}
+				
+				const distance = getDistance(
+					userLat,
+					userLon,
+					parseFloat(company.latitude),
+					parseFloat(company.longitude)
+				);
+				
+				// Convert distance to meters
+				const distanceMeters = distance * 1000;
+				
+				// Get company radius
+				const radiusNilai = parseFloat(company.radius_nilai || 0);
+				const radiusSatuan = company.radius_satuan || 'km';
+				let radiusMeters = radiusNilai;
+				if (radiusSatuan === 'km') {
+					radiusMeters = radiusNilai * 1000;
+				}
+				
+				// Check if company is within radius
+				if (distanceMeters <= radiusMeters && distance < minDistance) {
+					minDistance = distance;
+					nearestCompany = {
+						company: company,
+						distance: distance,
+						distanceMeters: distanceMeters
+					};
+				}
+			}
+			
+			return nearestCompany;
+		}
+		
+		function updateCompanyDetectionUI(nearestCompany, error) {
+			const eDetecting = document.getElementById('company-detecting');
+			const eDetected = document.getElementById('company-detected');
+			const eNotFound = document.getElementById('company-not-found');
+			
+			if (eDetecting) eDetecting.style.display = 'none';
+			
+			if (error) {
+				if (eDetected) eDetected.style.display = 'none';
+				if (eNotFound) {
+					eNotFound.style.display = 'block';
+					const eAlert = eNotFound.querySelector('.alert');
+					if (eAlert) {
+						let errorMsg = '<i class="fas fa-exclamation-triangle me-2"></i><strong>Gagal mendapatkan lokasi GPS!</strong><br>';
+						if (error.code === 1) {
+							errorMsg += '<small>Izin akses lokasi ditolak. Silakan aktifkan izin lokasi di pengaturan browser atau pilih perusahaan secara manual.</small>';
+						} else if (error.code === 2) {
+							errorMsg += '<small>Lokasi tidak tersedia. Pastikan GPS/Lokasi diaktifkan di perangkat Anda atau pilih perusahaan secara manual.</small>';
+						} else if (error.code === 3) {
+							errorMsg += '<small>Waktu tunggu GPS habis. Silakan coba lagi atau pilih perusahaan secara manual.</small>';
+						} else {
+							errorMsg += '<small>Pastikan GPS/Lokasi diaktifkan di browser Anda atau pilih perusahaan secara manual.</small>';
+						}
+						eAlert.innerHTML = errorMsg;
+					}
+				}
+				return;
+			}
+			
+			if (nearestCompany) {
+				const company = nearestCompany.company;
+				const distance = nearestCompany.distance;
+				const distanceText = distance < 1 
+					? (distance * 1000).toFixed(0) + ' meter' 
+					: distance.toFixed(2) + ' km';
+				
+				if (eNotFound) eNotFound.style.display = 'none';
+				if (eDetected) {
+					eDetected.style.display = 'block';
+					const eName = document.getElementById('detected-company-name');
+					const eDistance = document.getElementById('detected-company-distance');
+					const eSetting = document.getElementById('detected-company-setting');
+					
+					if (eName) eName.textContent = company.nama_company || 'Perusahaan';
+					if (eDistance) eDistance.textContent = 'Jarak: ' + distanceText;
+					if (eSetting && company.nama_setting) {
+						eSetting.textContent = company.nama_setting;
+						eSetting.style.display = 'inline-block';
+					} else if (eSetting) {
+						eSetting.style.display = 'none';
+					}
+				}
+				
+				// Set company ID and location fields
+				const eIdCompany = document.getElementById('id_company');
+				if (eIdCompany) eIdCompany.value = company.id_company;
+				
+				const eDetectedLat = document.getElementById('detected-latitude');
+				const eDetectedLng = document.getElementById('detected-longitude');
+				if (eDetectedLat) eDetectedLat.value = company.latitude || '';
+				if (eDetectedLng) eDetectedLng.value = company.longitude || '';
+				
+				// Set selected company fields
+				const eSelectedId = document.getElementById('selected-company-id');
+				const eSelectedLat = document.getElementById('selected-company-lat');
+				const eSelectedLng = document.getElementById('selected-company-lng');
+				const eSelectedRadius = document.getElementById('selected-company-radius');
+				const eSelectedSatuan = document.getElementById('selected-company-satuan');
+				
+				if (eSelectedId) eSelectedId.value = company.id_company;
+				if (eSelectedLat) eSelectedLat.value = company.latitude || '';
+				if (eSelectedLng) eSelectedLng.value = company.longitude || '';
+				if (eSelectedRadius) eSelectedRadius.value = company.radius_nilai || '';
+				if (eSelectedSatuan) eSelectedSatuan.value = company.radius_satuan || '';
+				
+				// Trigger companyDetected event
+				const event = new CustomEvent('companyDetected', {
+					detail: {
+						companyId: company.id_company,
+						company: company
+					}
+				});
+				window.dispatchEvent(event);
+			} else {
+				if (eDetected) eDetected.style.display = 'none';
+				if (eNotFound) {
+					eNotFound.style.display = 'block';
+					const eAlert = eNotFound.querySelector('.alert');
+					if (eAlert) {
+						eAlert.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>' +
+							'<strong>Anda tidak berada di lokasi company manapun!</strong><br>' +
+							'<small>Silahkan pergi ke lokasi company yang sudah di-assign atau pilih perusahaan secara manual.</small>';
+					}
+				}
+			}
+		}
+		
+		// Start GPS detection on page load
+		if (navigator.geolocation && typeof assignedCompanies !== 'undefined' && assignedCompanies && Array.isArray(assignedCompanies) && assignedCompanies.length > 0) {
+			navigator.geolocation.getCurrentPosition(
+				function(position) {
+					const userLat = position.coords.latitude;
+					const userLon = position.coords.longitude;
+					
+					// Set detected coordinates
+					const eDetectedLat = document.getElementById('detected-latitude');
+					const eDetectedLng = document.getElementById('detected-longitude');
+					if (eDetectedLat) eDetectedLat.value = userLat;
+					if (eDetectedLng) eDetectedLng.value = userLon;
+					
+					// Find nearest company
+					const nearestCompany = findNearestCompany(userLat, userLon);
+					updateCompanyDetectionUI(nearestCompany);
+				},
+				function(error) {
+					console.error('GPS Error:', error);
+					updateCompanyDetectionUI(null, error);
+				},
+				{
+					enableHighAccuracy: true,
+					timeout: 15000,
+					maximumAge: 0
+				}
+			);
+		} else {
+			// GPS not available or no companies assigned
+			const eDetecting = document.getElementById('company-detecting');
+			const eNotFound = document.getElementById('company-not-found');
+			if (eDetecting) eDetecting.style.display = 'none';
+			if (eNotFound) {
+				eNotFound.style.display = 'block';
+				const eAlert = eNotFound.querySelector('.alert');
+				if (eAlert) {
+					if (!navigator.geolocation) {
+						eAlert.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>' +
+							'<strong>GPS tidak tersedia di perangkat ini!</strong><br>' +
+							'<small>Silakan pilih perusahaan secara manual.</small>';
+					} else {
+						eAlert.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>' +
+							'<strong>Tidak ada perusahaan yang ditugaskan!</strong><br>' +
+							'<small>Silakan hubungi admin untuk melakukan penugasan perusahaan.</small>';
+					}
+				}
+			}
+		}
+	})();
 </script>
 
 <!-- QR Scanner Modal for fullscreen fallback -->

@@ -5,7 +5,7 @@
 <meta name="descrition" content="Presensi"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="mobile-web-app-capable" content="yes" />
-<link rel="manifest" href="manifest.json"/>
+	<link rel="manifest" href="<?=$config->baseURL?>manifest.json.php"/>
 <link rel="shortcut icon" href="<?=$config->baseURL . 'public/images/favicon.png?r='.time()?>" />
 
 <link rel="stylesheet" type="text/css" href="<?=$config->baseURL . 'public/vendors/fontawesome/css/all.css'?>"/>

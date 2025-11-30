@@ -25,11 +25,12 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 		<div class="card mb-3">
 			<div class="card-body">
 				<div class="d-flex justify-content-between align-items-start mb-2">
-					<h6 class="mb-0"><?=$activity->judul_activity?></h6>
+					<h6 class="mb-0"><?=htmlspecialchars(isset($activity->judul_activity) ? $activity->judul_activity : '')?></h6>
 					<?php
-					if ($activity->status == 'approved') {
+					$status = isset($activity->status) ? $activity->status : 'pending';
+					if ($status == 'approved') {
 						echo '<span class="badge bg-success">Approved</span>';
-					} elseif ($activity->status == 'rejected') {
+					} elseif ($status == 'rejected') {
 						echo '<span class="badge bg-danger">Rejected</span>';
 					} else {
 						echo '<span class="badge bg-warning">Pending</span>';
@@ -38,20 +39,51 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 				</div>
 				
 				<small class="text-muted">
-					<i class="fas fa-building me-1"></i><?=$activity->nama_company?><br>
-					<i class="fas fa-calendar me-1"></i><?=date('d-m-Y', strtotime($activity->tanggal))?> 
-					<i class="fas fa-clock ms-2 me-1"></i><?=$activity->waktu?>
+					<i class="fas fa-building me-1"></i><?=htmlspecialchars(isset($activity->nama_company) ? $activity->nama_company : '')?><br>
+					<i class="fas fa-calendar me-1"></i><?=date('d-m-Y', strtotime(isset($activity->tanggal) ? $activity->tanggal : 'now'))?> 
+					<i class="fas fa-clock ms-2 me-1"></i><?=htmlspecialchars(isset($activity->waktu) ? $activity->waktu : '')?>
 				</small>
 				
-				<p class="mt-2 mb-2"><?=nl2br($activity->deskripsi_activity)?></p>
+				<p class="mt-2 mb-2"><?=nl2br(htmlspecialchars(isset($activity->deskripsi_activity) ? $activity->deskripsi_activity : ''))?></p>
 				
-				<?php if ($activity->foto_activity): ?>
-				<img src="<?=$config->baseURL?>public/images/activity/<?=$activity->foto_activity?>" class="img-fluid rounded" style="max-height:200px">
+				<?php 
+				// Debug: Show what we have
+				$foto_images = (isset($activity->foto_activity_images) && is_array($activity->foto_activity_images)) ? $activity->foto_activity_images : [];
+				$foto_raw = isset($activity->foto_activity) ? $activity->foto_activity : null;
+				?>
+				
+				<?php if (!empty($foto_images)): ?>
+				<div class="mt-2">
+					<?php foreach ($foto_images as $image_file): ?>
+						<?php if (!empty($image_file)): ?>
+						<?php 
+						$image_url = $config->baseURL . 'public/images/activity/' . htmlspecialchars($image_file);
+						$image_path = ROOTPATH . 'public/images/activity/' . $image_file;
+						$file_exists = file_exists($image_path);
+						?>
+						<div class="mb-2">
+							<img src="<?=$image_url?>" 
+								 class="img-fluid rounded" 
+								 style="max-height:200px; width:auto; display:block;"
+								 alt="Activity Photo"
+								 onerror="console.error('Image failed to load: <?=htmlspecialchars($image_file)?>'); this.style.display='none';">
+							<?php if (!$file_exists): ?>
+							<small class="text-danger d-block">File not found: <?=htmlspecialchars($image_file)?></small>
+							<?php endif; ?>
+						</div>
+						<?php endif; ?>
+					<?php endforeach; ?>
+				</div>
+				<?php elseif (!empty($foto_raw)): ?>
+				<!-- Debug: Show raw foto_activity if images array is empty -->
+				<div class="alert alert-warning mt-2 mb-0">
+					<small>Debug: foto_activity exists but no images extracted. Raw value: <?=htmlspecialchars(substr($foto_raw, 0, 100))?></small>
+				</div>
 				<?php endif; ?>
 				
-				<?php if ($activity->status == 'rejected' && $activity->rejection_reason): ?>
+				<?php if ((isset($activity->status) ? $activity->status : '') == 'rejected' && !empty($activity->rejection_reason)): ?>
 				<div class="alert alert-danger mt-2 mb-0">
-					<small><strong>Alasan Reject:</strong><br><?=nl2br($activity->rejection_reason)?></small>
+					<small><strong>Alasan Reject:</strong><br><?=nl2br(htmlspecialchars(isset($activity->rejection_reason) ? $activity->rejection_reason : ''))?></small>
 				</div>
 				<?php endif; ?>
 			</div>

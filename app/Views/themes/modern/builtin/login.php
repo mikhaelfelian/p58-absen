@@ -37,10 +37,10 @@
 			</div>
 			<input type="password"  name="password" class="form-control login-input" placeholder="Password" aria-label="Password" aria-describedby="basic-addon1" required>
 		</div>
-		<!-- <div class="form-check">
-			<input class="form-check-input" type="checkbox" name="remember" value="1" id="rememberme">
-			<label class="form-check-label" for="rememberme" style="font-weight:normal">Remember me</label>
-		</div> -->
+		<div class="form-check">
+			<!-- <input class="form-check-input" type="checkbox" name="remember" value="1" id="rememberme"> -->
+			<label class="form-check-label" for="rememberme" style="font-weight:normal"></label>
+		</div>
 		<div class="mb-2 mt-3">
 			<button id="btn-submit-login" type="submit" class="form-control rounded-3 btn <?=$setting_aplikasi['btn_login']?>" name="submit">Submit</button>
 			<?php
@@ -50,8 +50,10 @@
 		</div>
 	</form>
 </div>
-<!-- <div class="card-footer rounded-bottom-4">
-	<p>Lupa Password? <a href="<?=$config->baseURL?>recovery">Request reset password</a></p>
-</div> -->
+<div class="card-footer rounded-bottom-4">
+	<p>
+		<!-- Lupa Password? <a href="<?=$config->baseURL?>recovery">Request reset password</a> -->
+	</p>
+</div>
 
 <?= $this->endSection() ?>
