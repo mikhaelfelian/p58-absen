@@ -1,1182 +1,3 @@
-let flatpickr_instance = '';
-let osRightPanel = '';
-let toastTimer = '';
-let $toast = '';
-let processing_page = false;
-let optionFlatpickr = {
-	enableTime: false,
-	dateFormat: "d-m-Y",
-	time_24hr: true,
-	locale: "id"
-}
-bootbox.setDefaults({
-    animate: false
-});
-
-function addBtnConfig() 
-{
-	$filter = $('#tabel-data_filter');
-	if ( $('#setting-barang').length == 0) {
-		$filter.append('<button class="btn btn-outline-secondary px-4" style="border-right:0" id="btn-kategori-barang"><i class="far fa-folder"></i></button><button class="btn-config btn btn-outline-secondary px-4" id="btn-setting-barang"><i class="fas fa-cog"></i></button>');
-	}
-}
-
-function addBtnConfigInvoice() 
-{
-	$filter = $('#tabel-data_filter');
-	if ( $('#setting-tampilan-invoice').length == 0) {
-		$filter.append('<button class="btn btn-outline-secondary btn-setting-searchbar" id="setting-tampilan-invoice"><i class="fas fa-cog"></i></button>');
-	}
-}
-
-function rightPanelOverlayScrollbar() {
-	if (osRightPanel) {
-		osRightPanel.destroy();
-	}
-	osRightPanel =  OverlayScrollbars( $('.right-panel-body'), {scrollbars : {autoHide: 'leave', autoHideDelay: 100}} );
-}
-
-function destroyFlatpickr() {
-	if (flatpickr_instance) {
-		if (flatpickr_instance.length == undefined) {
-			flatpickr_instance.destroy();
-		} else {
-			flatpickr_instance.map(function (instance) {
-				instance.destroy();
-			})
-		}
-	}
-}
-
-
-const dataTables_settings = 
-{
-	"processing": true,
-	"serverSide": true,
-	"scrollX": true,
-	"ajax": {
-		"url": '',
-		"type": "POST",
-		
-	},
-	"columns": '',
-	'initComplete': function() {
-		$('#tabel-data_wrapper').find('.tabel-data').css('opacity', 1);
-		$('.dataTables_scrollBody').overlayScrollbars({ scrollbars : {autoHide: 'leave', autoHideDelay: 100}  });
-		$('input[type="search"]').focus();
-	},
-	 "bLengthChange": false,
-	"bFilter": true,
-	"bInfo": false,
-	"fixedHeader": false,
-	"language": { search: '', searchPlaceholder: "Cari..." },
-	"sDom": "<'row'<'col-sm-12'<'form-group'<f>>>>tr<'row'<'col-sm-12'<'pull-left'i><'pull-right'p><'clearfix'>>>"
-	// "dom": '<"row"<"col-sm-4"l><"col-sm-4 text-center"p><"col-sm-4"f>>tip'
-}
-
-function loadDataTables(url) 
-{
-	const column = $.parseJSON($('#dataTables-column').html());
-	dataTables_settings.ajax.url = url
-	dataTables_settings.columns = column
-	dataTables_settings.searching = true
-	
-	let $add_setting = $('#dataTables-setting');
-	dataTables_settings.columnDefs = [];
-	if ($add_setting.length > 0) {
-		add_setting = $.parseJSON($('#dataTables-setting').html());
-		for (k in add_setting) {
-			dataTables_settings[k] = add_setting[k];
-		}
-	}
-	
-	dataTables_settings.drawCallback =  function( settings ) 
-	{
-		let $search = $('input[type="search"]');
-		
-		setting = {};
-		// setting.jumlah_digit_barcode = 13;
-		if ($('#setting-kasir').length) {
-			setting = JSON.parse($('#setting-kasir').text());
-		}
-		
-		if ($search.length) {
-			let search = $search.val();
-			if (search.length == parseInt(setting.jumlah_digit_barcode)) {
-				
-				$detail = $('.detail-barang');
-				if ($detail.length == 1) {
-					$detail.trigger('click');
-					$search.val('').focus().trigger('keyup');
-				} else {
-					bootbox.alert('Barang tidak ditemukan');
-				}
-			}
-		}
-    }
-	
-	dataTables_settings.searchDelay = 250;
-	// console.log(dataTables_settings);
-	dataTables =  $('#tabel-data').DataTable( dataTables_settings );
-	$filter = $('#tabel-data_filter');
-	$input = $filter.find('input').eq(0);
-	$filter.find('input').find('label').remove();
-	$filter.find('label').hide();
-	
-	$filter.addClass('input-group flex-nowrap shadow-sm');
-	$filter.append($input);
-	
-	$parent = $filter.parent();
-	$parent.css('display', 'flex');
-	
-	
-	if ($('#page-type').val() == 'kasir') {
-		addBtnConfig();
-	}
-	
-	if ($('#page-type').val() == 'invoice') {
-		addBtnConfigInvoice();
-	}
-		
-	if ($parent.find('.btn-close-panel').length == 0) {
-		$filter.append('<button class="btn btn-danger btn-close-panel rounded-1 ms-2" style="width:45px; height:40px; display:none; box-shadow: none;"><i class="fas fa-times"></i></button>');
-	}
-	
-	$('.dataTables_paginate').parent().parent().parent().addClass('px-4');
-	$('.dataTables_paginate').parent().parent().addClass('px-0');
-	
-	$("div.dataTables_filter input").unbind();
-	
-	cariBarang = '';
-	notifikasi = '';
-	
-	after_searching_barcode = false;
-	$("div.dataTables_filter input").keyup( function (e) {
-		search_value = this.value;
-		let $this = $(this);
-		clearTimeout(cariBarang);
-		if (setting.jumlah_digit_barcode == search_value.length) 
-		{
-			/* $.get(base_url + 'pos-kasir/getBarangByBarcode?barcode=' + search_value, function(data) {
-				alert();
-			}) */
-			addItem(barang_with_barcode[search_value]);
-			$this.val('');
-			after_searching_barcode = true;
-			return;
-		}
-		// return;
-		if (search_value == '' && after_searching_barcode && $('#data-barang-tidak-ditemukan').length == 0) {
-			return;
-		}
-		
-		cariBarang = setTimeout(function() {
-			after_searching_barcode = false;
-			dataTables.search( search_value ).draw();
-		}, dataTables_settings.searchDelay);
-		
-	});
-}
-
-let show_login_page = false;
-$(document).ajaxStart(function() { Pace.restart(); });
-$(document).ajaxSuccess(function(event, request, settings) {
-	if (request.getResponseHeader('required-auth') == '1') {
-		// document.write('');
-		if ( !show_login_page ) {
-			let url = base_url + 'login';
-			window.location = base_url;
-			history.pushState( url,'',url);
-			show_login_page = true;
-		}
-	}
-});
-
-function nama_hari() {
-	return ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-}
-
-function nama_bulan() {
-	return ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-}
-
-// Placeholder
-function placeholder(param = {}) 
-{
-	classes = param.classes != undefined ? param.classes : '';
-	style = '';
-	if (param.style != undefined) {
-		for (k in param.style) {
-			style += k + ':' + param.style[k] + ';';
-		}
-	}
-	
-	return '<div class="ssc-square ' + classes + '" style="' + style + ';background:#d6e0ed;border-radius:10px"></div>';
-}
-// Untuk tombol spa dan HISTORY browser
-function loadContent(param, callback = false) 
-{
-	current_url = window.location.protocol + '//' + window.location.host + window.location.pathname;
-	if (param.url == current_url + window.location.search) {
-		processing_page = false;
-		return false;
-	}
-	
-	history.pushState( param.url,'', param.url);
-// console.log(current_url);
-	$('.navbar-footer').find('.active').removeClass('active');
-	$('.navbar-footer').find('a[href="' + param.url + '"]').addClass('active');
-	
-	if (param.placeholder != undefined) 
-	{
-		if (param.placeholder == 'presensi-riwayat') {
-			$('#page-content').empty();
-			height = $('body').height();
-			height = height - 23 - 78 - 72;
-			num = Math.floor(height / 118);
-			html = '<div class="container mt-3">' +
-					'<div class="flex mbs">' 
-						+ placeholder({classes:'mt-3 mb-3', style: {'height' : '22px', 'width' : '200px', 'margin' : 'auto'}})
-						+ placeholder({classes:'mb-4', style: {'height' : '77px'}})
-						for (i = 1; i < num; i++) {
-							html += placeholder({classes:'mb-2', style: {'height' : '110px'}});
-						}					
-						
-			html += '</div>' +
-				'</div>';
-			
-		} else if (param.placeholder == 'presensi-home') {
-			html = '<div class="container mt-4">'
-				+ placeholder({classes:'mt-2 mb-2', style: {'height' : '20px', 'width' : '200px', 'margin' : 'auto'}})
-				+ placeholder({classes:'mt-0 mb-0', style: {'height' : '17px', 'width' : '150px', 'margin' : 'auto'}})
-				+ placeholder({classes:'mt-4 mb-4', style: {'height' : '66px'}})
-				+ '<div class="row mb-4">'
-					+ '<div class="col-6 pe-2">'
-						+ placeholder({style: {'height' : '122.5px'}})
-					+ '</div>'
-					+ '<div class="d-flex col-6 ps-2">'
-						+ placeholder({style: {'height' : '122.5px'}})
-					+ '</div>'
-				+ '</div>';
-				
-				if (setting.gunakan_radius_lokasi == 'Y') {
-					html += placeholder({classes:'mb-4', style: {'height' : '66px'}})
-				}
-				
-				html += placeholder({classes:'mb-4', style: {'height' : '22px', 'width' : '200px'}})
-				
-				for (i = 1; i < 4; i++) {
-					html += placeholder({classes:'mb-2', style: {'height' : '100px'}});
-				}
-			html += '</div>';
-		} else if (param.placeholder == 'user-profil' || param.placeholder == 'ubah-password') {
-			$('#page-content').empty();
-			
-			height = $('body').height();
-			height = parseInt(height) - 53 - 60 - 152;
-			html = '<div class="container mt-4">'
-					+ placeholder({classes: 'mt-4 mb-2', style: {'height' : '22px', 'width': '120px'}})
-					+ placeholder({style: {'height' : height + 'px'}})
-					+ '</div>'
-		}
-		
-		$('#page-content').html(html);
-	}
-
-	url = param.url;
-	$.get(url, function(data) 
-	{
-		$html = $('<div>');
-		$html.append(data);
-		
-		$new_content = $html.find('.container');
-
-		$('script[data-type="dynamic-resource-head"], link[data-type="dynamic-resource-head"]').remove();
-		$resources = $html.find('[data-type="dynamic-resource-head"]');
-		$resources.appendTo($('head'));
-		
-		$('#page-content').html($new_content);
-		processing_page = false;
-
-		if (callback) {
-			callback();
-		}
-		
-		rightPanelOverlayScrollbar();
-	});
-}
-
-window.addEventListener('popstate', function(e) {
-	if (e.state) {
-		loadContent(e.state);
-	}
-});
-
-history.pushState( window.location.href,'',window.location.href);
-
-function toast_mobile(message) {
-	$toast = $('<div class="toast align-items-center text-bg-secondary border-0 start-50 translate-middle-x ps-3 pe-3" role="alert" aria-live="assertive" aria-atomic="true" style="display: block;position: fixed;bottom: 0;width:auto">' +
-			'<div class="d-flex">' +
-				'<div class="toast-body text-nowrap">' +
-					message +
-				'</div>' +
-			'</div>' +
-		'</div>');
-	$toast.animate({bottom:100}, 400, function() {
-		setTimeout(function () {
-			$toast.animate({bottom:0}, 400, function() {
-				$toast.remove();
-			})
-		}, 2000)
-	});
-	$('body').append($toast);
-}
-
-$(document).ready(function() {
-	
-	$(document).undelegate('.link-spa', 'click').delegate('.link-spa', 'click', function(e) {
-		e.preventDefault();
-
-		if (processing_page) {
-			return;
-		}
-		
-		if ($(this).hasClass('active')) {
-			return;
-		}
-		
-		processing_page = true;
-		if (flatpickr_instance) {
-			if (flatpickr_instance.length == undefined) {
-				flatpickr_instance.destroy();
-			} else {
-				flatpickr_instance.map(function (instance) {
-					instance.destroy();
-				})
-			}
-		}
-		
-		offcanvas.hide();
-
-		url = $(this).attr('href');
-				
-		data_placeholder = $(this).attr('data-placeholder');
-		loadContent({url:url, placeholder: data_placeholder});
-	});
-
-	
-	// Setting
-	setting = {};
-	if ($('#setting-presensi').length) {
-		setting = JSON.parse($('#setting-presensi').text());
-	}
-	
-	// Geolocation
-	options = {enableHighAccuracy: true, timeout: 5000, maximumAge:0};
-	let geolocation = {};
-	
-	success = function(pos) {
-		geolocation = pos;		
-		if (setting.gunakan_radius_lokasi == 'Y') 
-		{
-			dist = getDistance(setting.latitude, setting.longitude, geolocation.coords.latitude, geolocation.coords.longitude);
-			radius = parseInt(setting.radius_nilai);
-			if (setting.radius_satuan == 'km') {
-				radius = radius * 1000;
-			}
-			dist = dist * 1000;
-			if (radius < dist) {
-				$alert = $('<div class="alert alert-danger d-flex align-items-center mt-4"><i class="bi bi-x-circle fs-1 me-3"></i>Lokasi Anda diluar radius lokasi absen yang diperbolehkan. Radius lokasi absen adalah ' + setting.radius_nilai + setting.radius_satuan + ' dari kantor (' + setting.latitude + ', ' + setting.longitude + ')</div>'); 
-			} else {
-				$alert = $('<div class="alert alert-success d-flex align-items-center mt-4"><i class="bi bi-check-circle fs-1 me-3"></i>Lokasi Anda berada di dalam radius lokasi absen</div>'); 
-			}
-			
-			if ($('#alert-lokasi').length) {
-				$alert.appendTo($('#alert-lokasi'));
-				$('#alert-lokasi').show();
-			}
-		}
-	}
-	error = function(err) {
-		if (options.enableHighAccuracy) {
-    		options.enableHighAccuracy = false;
-    		navigator.geolocation.getCurrentPosition( success, error, options);
-		} else {
-		    alert_icon('Error: ' + err.message);
-    		console.log(err);
-		}
-	}
-	navigator.geolocation.getCurrentPosition( success, error, options);
-	
-	function getDistance(lat1, long1, lat2, long2) {
-		let theta = long1 - long2;
-		let distance = 60 * 1.1515 * (180/Math.PI) * Math.acos(
-			Math.sin(lat1 * (Math.PI/180)) * Math.sin(lat2 * (Math.PI/180)) + 
-			Math.cos(lat1 * (Math.PI/180)) * Math.cos(lat2 * (Math.PI/180)) * Math.cos(theta * (Math.PI/180))
-		);
-		// kilometer
-		return distance * 1.609344;
-	}
-		
-	$('#btn-presensi').click(function(e){
-		e.preventDefault();
-		
-		// Check if today is a working day
-		var today = new Date().getDay(); // 0 = Sunday, 1 = Monday, etc.
-		var hariKerja = typeof companySetting !== 'undefined' && companySetting && companySetting.hari_kerja ? companySetting.hari_kerja : [1,2,3,4,5];
-		
-		// Ensure integer comparison
-		var isWorkingDay = hariKerja.some(function(day) {
-			return parseInt(day) === parseInt(today);
-		});
-		
-		if (!isWorkingDay) {
-			Swal.fire({
-				icon: 'info',
-				title: 'Hari Libur',
-				text: 'Anda tidak bisa absen di hari libur. Presensi hanya dapat dilakukan pada hari kerja.',
-				confirmButtonText: 'OK'
-			});
-			return false;
-		}
-		
-		date = new Date();
-		jam_sekarang = ("0" + date.getHours()).substr(-2);
-		menit_sekarang = ("0" + date.getMinutes()).substr(-2);
-		detik_sekarang = ("0" + date.getSeconds()).substr(-2);
-		waktu_sekarang = jam_sekarang + ':' + menit_sekarang + ':' + detik_sekarang;
-		if (waktu_sekarang < setting.waktu_masuk_akhir) {
-			presensi('masuk');
-		} else {
-			presensi('pulang');
-		}
-	})
-	
-	$('body').undelegate('#presensi-masuk', 'click');
-	$('body').undelegate('#presensi-pulang', 'click');
-	
-	btn_clicked = '';
-	$('body').delegate('#presensi-pulang, #presensi-masuk', 'click', function(e) {
-		$this = $(this);
-		e.preventDefault();
-		btn_clicked =  $this.attr('id');
-		const jenis_presensi = btn_clicked == 'presensi-masuk' ? 'masuk' : 'pulang';
-		presensi(jenis_presensi);
-	})
-		
-	$bootbox_presensi = '';
-	function presensi(jenis_presensi) {
-		
-		// Check if today is a working day
-		var today = new Date().getDay(); // 0 = Sunday, 1 = Monday, etc.
-		var hariKerja = typeof companySetting !== 'undefined' && companySetting && companySetting.hari_kerja ? companySetting.hari_kerja : [1,2,3,4,5];
-		
-		// Ensure integer comparison
-		var isWorkingDay = hariKerja.some(function(day) {
-			return parseInt(day) === parseInt(today);
-		});
-		
-		if (!isWorkingDay) {
-			Swal.fire({
-				icon: 'info',
-				title: 'Hari Libur',
-				text: 'Anda tidak bisa absen di hari libur. Presensi hanya dapat dilakukan pada hari kerja.',
-				confirmButtonText: 'OK'
-			});
-			return false;
-		}
-		
-		// Check if a company was manually selected or if company is set (from active shift)
-		var selectedCompanyId = $('#selected-company-id').val() || $('#id_company').val();
-		var isManualSelection = $('#selected-company-id').val() ? true : false;
-		var hasCompanySelected = $('#id_company').val() ? true : false;
-		var usingCompanyLocationFallback = false;
-		
-		// Helper function to get company location from assignedCompanies array
-		function getCompanyLocationFromArray(companyId) {
-			if (typeof assignedCompanies === 'undefined' || !assignedCompanies || !Array.isArray(assignedCompanies)) {
-				return null;
-			}
-			
-			for (var i = 0; i < assignedCompanies.length; i++) {
-				var company = assignedCompanies[i];
-				var companyIdToCompare = company.id_company;
-				if (companyIdToCompare == companyId) {
-					return {
-						latitude: company.latitude || null,
-						longitude: company.longitude || null
-					};
-				}
-			}
-			return null;
-		}
-		
-		// Check if geolocation is available, if not try to get from detected fields or get current location
-		if (geolocation.coords == undefined) {
-			// Try to get location from detected-latitude/detected-longitude fields (set by GPS or manual selection)
-			var detectedLat = $('#detected-latitude').val();
-			var detectedLng = $('#detected-longitude').val();
-			
-			if (detectedLat && detectedLng) {
-				// Construct geolocation object from detected coordinates
-				geolocation = {
-					coords: {
-						latitude: parseFloat(detectedLat),
-						longitude: parseFloat(detectedLng)
-					}
-				};
-			} else if (isManualSelection || hasCompanySelected) {
-				// Manual selection or active shift without GPS - use company location as fallback
-				var companyLat = $('#selected-company-lat').val();
-				var companyLng = $('#selected-company-lng').val();
-				
-				// If selected-company-lat/lng are not set, try to get from assignedCompanies array
-				if ((!companyLat || !companyLng) && selectedCompanyId) {
-					var companyLocation = getCompanyLocationFromArray(selectedCompanyId);
-					if (companyLocation && companyLocation.latitude && companyLocation.longitude) {
-						companyLat = companyLocation.latitude;
-						companyLng = companyLocation.longitude;
-						// Also set the hidden fields for future use
-						var latField = $('#selected-company-lat');
-						var lngField = $('#selected-company-lng');
-						if (latField.length) latField.val(companyLat);
-						if (lngField.length) lngField.val(companyLng);
-					}
-				}
-				
-				if (companyLat && companyLng) {
-					// Use company location as fallback for manual selection or active shift
-					geolocation = {
-						coords: {
-							latitude: parseFloat(companyLat),
-							longitude: parseFloat(companyLng)
-						}
-					};
-					usingCompanyLocationFallback = true;
-					console.log('Using company location as fallback:', companyLat, companyLng);
-				} else {
-					// Try to get current GPS location as last resort
-					if (navigator.geolocation) {
-						alert_icon('Mendapatkan lokasi GPS...');
-						navigator.geolocation.getCurrentPosition(
-							function(position) {
-								geolocation = position;
-								// Retry presensi after getting location
-								presensi(jenis_presensi);
-							},
-							function(error) {
-								// GPS failed but company is selected - try to get company location from array
-								var companyLat = $('#selected-company-lat').val();
-								var companyLng = $('#selected-company-lng').val();
-								
-								// If not in hidden fields, try to get from assignedCompanies array
-								if ((!companyLat || !companyLng) && selectedCompanyId) {
-									var companyLocation = getCompanyLocationFromArray(selectedCompanyId);
-									if (companyLocation && companyLocation.latitude && companyLocation.longitude) {
-										companyLat = companyLocation.latitude;
-										companyLng = companyLocation.longitude;
-									}
-								}
-								
-								if (companyLat && companyLng) {
-									geolocation = {
-										coords: {
-											latitude: parseFloat(companyLat),
-											longitude: parseFloat(companyLng)
-										}
-									};
-									usingCompanyLocationFallback = true;
-									// Retry presensi with company location
-									presensi(jenis_presensi);
-								} else {
-									alert_icon('Lokasi GPS tidak tersedia. Silakan aktifkan GPS atau pilih perusahaan secara manual.');
-								}
-							},
-							{enableHighAccuracy: true, timeout: 5000, maximumAge: 0}
-						);
-						return;
-					} else {
-						// No geolocation support - use company location if available
-						var companyLat = $('#selected-company-lat').val();
-						var companyLng = $('#selected-company-lng').val();
-						
-						// If not in hidden fields, try to get from assignedCompanies array
-						if ((!companyLat || !companyLng) && selectedCompanyId) {
-							var companyLocation = getCompanyLocationFromArray(selectedCompanyId);
-							if (companyLocation && companyLocation.latitude && companyLocation.longitude) {
-								companyLat = companyLocation.latitude;
-								companyLng = companyLocation.longitude;
-							}
-						}
-						
-						if (companyLat && companyLng) {
-							geolocation = {
-								coords: {
-									latitude: parseFloat(companyLat),
-									longitude: parseFloat(companyLng)
-								}
-							};
-							usingCompanyLocationFallback = true;
-						} else {
-							alert_icon('Lokasi GPS tidak tersedia. Silakan aktifkan GPS atau pilih perusahaan secara manual.');
-							return;
-						}
-					}
-				}
-			} else {
-				// If no detected location and no company selected, try to get current GPS location
-				// But first check if company is set (from active shift) and get its location
-				if (hasCompanySelected && selectedCompanyId) {
-					var companyLocation = getCompanyLocationFromArray(selectedCompanyId);
-					if (companyLocation && companyLocation.latitude && companyLocation.longitude) {
-						geolocation = {
-							coords: {
-								latitude: parseFloat(companyLocation.latitude),
-								longitude: parseFloat(companyLocation.longitude)
-							}
-						};
-						usingCompanyLocationFallback = true;
-						console.log('Using company location from active shift:', companyLocation.latitude, companyLocation.longitude);
-					} else if (navigator.geolocation) {
-						// Try GPS as fallback
-						alert_icon('Mendapatkan lokasi GPS...');
-						navigator.geolocation.getCurrentPosition(
-							function(position) {
-								geolocation = position;
-								// Retry presensi after getting location
-								presensi(jenis_presensi);
-							},
-							function(error) {
-								// GPS failed - if company is selected, use company location
-								if (hasCompanySelected && selectedCompanyId) {
-									var companyLocation = getCompanyLocationFromArray(selectedCompanyId);
-									if (companyLocation && companyLocation.latitude && companyLocation.longitude) {
-										geolocation = {
-											coords: {
-												latitude: parseFloat(companyLocation.latitude),
-												longitude: parseFloat(companyLocation.longitude)
-											}
-										};
-										usingCompanyLocationFallback = true;
-										presensi(jenis_presensi);
-									} else {
-										alert_icon('Lokasi harus diaktifkan. Pastikan GPS/Lokasi diaktifkan di browser Anda.');
-									}
-								} else {
-									alert_icon('Lokasi harus diaktifkan. Pastikan GPS/Lokasi diaktifkan di browser Anda.');
-								}
-							},
-							{enableHighAccuracy: true, timeout: 5000, maximumAge: 0}
-						);
-						return;
-					} else {
-						// No geolocation support - use company location if available
-						var companyLocation = getCompanyLocationFromArray(selectedCompanyId);
-						if (companyLocation && companyLocation.latitude && companyLocation.longitude) {
-							geolocation = {
-								coords: {
-									latitude: parseFloat(companyLocation.latitude),
-									longitude: parseFloat(companyLocation.longitude)
-								}
-							};
-							usingCompanyLocationFallback = true;
-						} else {
-							alert_icon('Lokasi harus diaktifkan');
-							return;
-						}
-					}
-				} else if (navigator.geolocation) {
-					// No company selected - try GPS
-					alert_icon('Mendapatkan lokasi GPS...');
-					navigator.geolocation.getCurrentPosition(
-						function(position) {
-							geolocation = position;
-							// Retry presensi after getting location
-							presensi(jenis_presensi);
-						},
-						function(error) {
-							alert_icon('Lokasi harus diaktifkan. Pastikan GPS/Lokasi diaktifkan di browser Anda.');
-						},
-						{enableHighAccuracy: true, timeout: 5000, maximumAge: 0}
-					);
-					return;
-				} else {
-					alert_icon('Lokasi harus diaktifkan');
-					return;
-				}
-			}
-		}
-		
-		// No time range validation - users can clock in/out at ANY time
-		// Validation is based solely on duration >= jam_kerja_target
-		
-		// Only validate radius if GPS location is actually available (not using company location fallback)
-		if (setting.gunakan_radius_lokasi == 'Y' && !usingCompanyLocationFallback && geolocation.coords) {
-			dist = getDistance(setting.latitude, setting.longitude, geolocation.coords.latitude, geolocation.coords.longitude);
-			radius = parseInt(setting.radius_nilai);
-			if (setting.radius_satuan == 'km') {
-				radius = radius * 1000;
-			}
-			dist = dist * 1000;
-			if (radius < dist) {
-				alert_icon('Lokasi Anda diluar radius lokasi absen yang diperbolehkan. Radius lokasi absen adalah ' + setting.radius_nilai + setting.radius_satuan + ' dari kantor (' + setting.latitude + ', ' + setting.longitude + ')');
-				return;
-			} else {
-				// alert_icon('Lokasi Anda berada di dalam radius lokasi absen');
-				// return;
-			}
-		} else if (setting.gunakan_radius_lokasi == 'Y' && usingCompanyLocationFallback) {
-			// Manual selection without GPS - skip radius validation since we can't verify actual location
-			console.log('Skipping radius validation for manual selection without GPS');
-		}
-				
-		// Get selected company ID (already retrieved above, but ensure it's set)
-		if (!selectedCompanyId) {
-			selectedCompanyId = $('#selected-company-id').val() || $('#id_company').val();
-		}
-		
-		data = {
-			'location' : geolocation, 
-			'jenis_presensi' : jenis_presensi, 
-			'foto' : '',
-			'id_company': selectedCompanyId
-		};
-		
-		/* r = Math.floor(Math.random() * (64 - 16 + 1)) + 32;
-		p = Array.from(
-				window.crypto.getRandomValues(new Uint8Array(Math.ceil(r / 2))),
-				(b) => ("0" + (b & 0xFF).toString(16)).slice(-2)
-			).join("");
-		
-		data = await JsAesPhp.encrypt(data, p) + p + r; */
-		hari = nama_hari();
-		bulan = nama_bulan();
-		hari_tanggal = hari[moment().day()] + ', ' + moment().format('DD') + ' ' + bulan[moment().month()] + ' ' + moment().year();
-		
-		waktu = new Date();
-		jam = "0" + waktu.getHours();
-		menit = "0" + waktu.getMinutes();
-		detik = "0" + waktu.getSeconds();
-		
-		$bootbox_presensi = bootbox.dialog({
-			message: '<div class="text-center mt-2 mb-3">' + 
-						'<div class="mb-2 header-container">' + 
-							'<p class="m-0 fw-bold">PRESENSI ' + jenis_presensi.toUpperCase() + '</p><hr/>' + 
-							'<p class="m-0">' + hari_tanggal + '</p>' + 
-							'<p class="live-jam">' + jam.substr(-2) + ':' + menit.substr(-2) + ':' + detik.substr(-2) + '</p>' + 
-						'</div>'+
-						
-						'<div id="video-container" class="mb-3" style="position:relative; display:none;">'+
-							'<video id="video" autoplay></video>' +
-							'<div id="webcam-loader">' +
-								'<div id="webcam-spinner" class="text-center rounded-4" style="position:absolute;width:60px;height:60px;background:#fff9c0;left:calc(50% - 30px);top:calc(50% - 45px);padding-top:15px;color:#f19f00">' + 
-									'<div class="spinner-border"></div>' + 
-								'</div>' + 
-								'<p style="position:absolute;bottom: 25px;margin: auto;width: 100%;">Memuat kamera...</p>' +
-							'</div>' + 
-						'</div>'+
-						'<div id="presensi-container" style="position:relative; display:none">'+
-							'<div class="spinner-border"></div>' + 
-							'<p class="mt-2">' + 'Memproses presensi</p>' +
-						'</div>'+
-						'<div id="canvas-container" class="mb-3" style="position:relative;display:none">' + 
-							'<canvas id="canvas"></canvas>' + 
-							'<button class="btn btn-warning text-light" id="btn-ambil-ulang-foto" style="position:absolute;right:10px;bottom:12px">' + 
-								'<i class="fas fa-rotate-left"></i>' + 
-							'</button>' + 
-							'<div id="foto-raw" style="display:none"></div>' +
-						'</div>' +
-						'<div id="presensi-flash-control-wrapper" class="mb-3" style="display:none;">' +
-							'<div class="d-flex align-items-center gap-2 justify-content-center">' +
-								'<small class="text-muted me-2">Flash:</small>' +
-								'<div class="btn-group" role="group">' +
-									'<button type="button" class="btn btn-sm btn-outline-secondary flash-toggle-presensi active" data-flash-mode="auto">' +
-										'<i class="fas fa-adjust me-1"></i>Auto' +
-									'</button>' +
-									'<button type="button" class="btn btn-sm btn-outline-secondary flash-toggle-presensi" data-flash-mode="on">' +
-										'<i class="fas fa-lightbulb me-1"></i>On' +
-									'</button>' +
-									'<button type="button" class="btn btn-sm btn-outline-secondary flash-toggle-presensi" data-flash-mode="off">' +
-										'<i class="fas fa-lightbulb me-1"></i>Off' +
-									'</button>' +
-								'</div>' +
-							'</div>' +
-							'<small id="presensi-flash-support-text" class="text-muted d-block mt-1 text-center"></small>' +
-						'</div>' +
-						'<button type="button" class="btn btn-success" id="btn-ambil-foto" style="display:none" disabled>Ambil Foto</button>' +
-						'<button type="button" class="btn btn-primary" id="btn-submit-presensi" style="display:none">Submit</button>' +
-					'</div>',
-			closeButton: false
-		});
-				
-		setInterval(function(){ 
-			waktu = new Date();
-			jam = "0" + waktu.getHours();
-			menit = "0" + waktu.getMinutes();
-			detik = "0" + waktu.getSeconds();
-			$('.live-jam').html(jam.substr(-2) + ':' + menit.substr(-2) + ':' + detik.substr(-2));
-			
-		}, 1000);
-		
-		if (setting.gunakan_foto_selfi == 'Y') {
-			
-			$('#video-container, #btn-ambil-foto').show();
-			
-			$btn_close = $('<button type="button" class="bootbox-close-button btn-close" aria-hidden="true" style="position: absolute;right: 10px;top: 10px;z-index:99999"></button>')
-			$bootbox_presensi.find('.modal-content').prepend($btn_close);
-
-			// Presensi flash button click handlers
-			$bootbox_presensi.on('click', '.flash-toggle-presensi', function() {
-				const mode = $(this).data('flash-mode');
-				if (!mode) {
-					return;
-				}
-				if (!presensiTorchSupported) {
-					if (typeof Swal !== 'undefined') {
-						Swal.fire('Info', 'Lampu tidak tersedia di perangkat ini.', 'info');
-					}
-					return;
-				}
-				presensiFlashMode = mode;
-				updatePresensiFlashButtons();
-				applyPresensiFlashMode(mode);
-			});
-
-			attachWebcam();
-			$('#btn-submit-presensi').click(function(){
-				$bootbox_presensi.find('button').prop('disabled', true);
-				$(this).prepend('<span class="spinner-border spinner-border-sm me-2">');
-				data.foto = $('#foto-raw').text();
-				saveData(data);
-			});
-			
-		} else {
-			
-			$('#presensi-container').show();
-			saveData(data);
-		}
-	};
-	
-	let video = '';
-	async function attachWebcam() {
-		
-		navigator.mediaDevices.getUserMedia({video: true})
-		.then((stream) => 
-		{
-			camera_dimension = stream.getVideoTracks()[0].getSettings();
-			webcam_container_width = $('.modal-dialog').width() - 40;
-			webcam_container_height = camera_dimension.height * (webcam_container_width / camera_dimension.width);
-			
-			// Store video track for flash control
-			presensiVideoTrack = stream.getVideoTracks()[0];
-			
-			video = document.getElementById("video");
-			video.srcObject  = stream;
-			video.onloadedmetadata = () => {
-				$('#video').width(webcam_container_width);
-				video.play();
-				$('#webcam-loader').remove();
-				$('#btn-ambil-foto').prop('disabled', false);
-				// Setup flash control after video is ready
-				setupPresensiFlashControl();
-			};
-			
-			$('#canvas').attr('width', webcam_container_width);
-			$('#canvas').attr('height', webcam_container_height);
-			$('#btn-ambil-foto').click(function() {
-				
-				let canvas = document.getElementById("canvas");
-				canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-				$('#canvas-container').show();
-				$('#video').hide();
-				$('#btn-ambil-foto').hide();
-				$('#btn-submit-presensi').show();
-				let image_data_url = canvas.toDataURL('image/jpeg');
-				$('#foto-raw').text(image_data_url);
-			});
-			
-			$('#btn-ambil-ulang-foto').click(function() {
-				$('#btn-ambil-foto').show();
-				$('#video').show();
-				$('#canvas-container').hide();
-				$('#btn-submit-presensi').hide();
-			})
-			
-			$('.bootbox-close-button').click(function() {
-				tracks = video.srcObject.getTracks();
-				tracks[0].stop();
-				// Reset presensi flash control
-				presensiVideoTrack = null;
-				hidePresensiFlashControl();
-			});
-			
-		})
-		.catch((err) => {
-			$('#webcam-loader').remove();
-			alert_icon('Gagal memuat kamera, cek console browser');
-			console.log(err);
-		});
-	}
-
-	function saveData(data)
-	{
-		$.ajax({
-			url: base_url + 'mobile-presensi-home/ajaxSaveData',
-			type: 'post',
-			data: 'data=' + btoa(JSON.stringify(data)),
-			success: function(data) {
-				data = JSON.parse(data);
-				if (data.status == 'ok') 
-				{
-					$bootbox_presensi.modal('hide');
-					if (video) {
-						tracks = video.srcObject.getTracks();
-						tracks[0].stop();
-					}
-					// Reset presensi flash control
-					presensiVideoTrack = null;
-					hidePresensiFlashControl();
-					// Update waktu presensi if btn_clicked is set
-					if (btn_clicked && btn_clicked !== '') {
-						$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
-					}
-					toast_mobile('<i class="bi bi-check-circle me-2"></i>Data berhasil disimpan');
-
-					// Refresh presensi buttons and history sections via AJAX
-					// Beri sedikit jeda agar user sempat melihat toast
-					setTimeout(function() {
-						refreshPresensiSections();
-					}, 800);
-					/* let $bootbox_timer = bootbox.dialog({
-						message: '<div class="text-center mt-4 mb-4"><div class="mb-2 fs-1 text-success"><i class="far fa-circle-check"></i></div><p class="mb-4">Data presensi ' + data.data.jenis_presensi + ' berhasil disimpan</p></div>',
-						closeButton: false
-					});
-					
-					$bootbox_timer.find('.modal-content').addClass('ms-3 me-3');
-					$bootbox_timer.find('.modal-body').addClass('p-0');
-					$bootbox_timer.find('.modal-body').prepend('<div class="timer-bar bg-warning" style="height:4px;width:100%;opacity:0.7">'); */
-					
-					/* const timerInterval = setInterval(timerBar, 1);
-					function timerBar() 
-					{
-						const date = new Date();
-						currWidth = parseInt($('.timer-bar').width());
-						$('.timer-bar').width(currWidth - 1);
-						if (currWidth < 2) {
-							clearInterval(timerInterval);
-							$bootbox_timer.modal('hide');
-							$('#presensi-' + data.data.jenis_presensi).find('.waktu-presensi').text(data.data.waktu)
-						}
-					} */
-				} else {
-					if ($('#btn-submit-presensi').length) {
-						$bootbox_presensi.find('button').prop('disabled', false);
-						$bootbox_presensi.find('.spinner-border').remove();
-					}
-					alert_icon(data.message);
-				}
-			},
-			error: function (xhr) {
-				if ($('#btn-submit-presensi').length) {
-					$bootbox_presensi.find('button').prop('disabled', false);
-					$bootbox_presensi.find('.spinner-border').remove();
-				}
-				alert_icon(xhr);
-				console.log(xhr);
-			}
-		})
-	}
-	
-	/**
-	 * Refresh presensi buttons and history sections via AJAX
-	 * Replaces full page reload with partial refresh for better UX
-	 */
-	function refreshPresensiSections() {
-		// Show loading indicators
-		var $buttonsContainer = $('#presensi-buttons-container');
-		var $historyContainer = $('#presensi-history-container');
-		
-		if ($buttonsContainer.length) {
-			$buttonsContainer.html('<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Memuat...</span></div></div>');
-		}
-		
-		if ($historyContainer.length) {
-			$historyContainer.html('<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Memuat...</span></div></div>');
-		}
-		
-		// Fetch updated sections
-		$.ajax({
-			url: base_url + 'mobile-presensi-home/ajaxRefreshSections',
-			type: 'get',
-			success: function(response) {
-				try {
-					var data = typeof response === 'string' ? JSON.parse(response) : response;
-					
-					if (data.status === 'ok') {
-						// Update buttons section
-						if ($buttonsContainer.length && data.buttons_html) {
-							$buttonsContainer.html(data.buttons_html);
-						}
-						
-						// Update history section
-						if ($historyContainer.length && data.history_html) {
-							$historyContainer.html(data.history_html);
-						}
-					} else {
-						console.error('Failed to refresh sections:', data);
-						// Fallback to full reload on error
-						window.location.reload();
-					}
-				} catch (e) {
-					console.error('Error parsing refresh response:', e);
-					// Fallback to full reload on error
-					window.location.reload();
-				}
-			},
-			error: function(xhr, status, error) {
-				console.error('AJAX error refreshing sections:', error);
-				// Fallback to full reload on error
-				window.location.reload();
-			}
-		});
-	}
-	
-	$('#user-menu-nav-header').click(function() {
-		img_src = $(this).find('img').attr('src');
-		user_detail = JSON.parse($('#user-detail').text());
-		// bootbox.alert('oke');
-		menu_user = '<div>'+
-						'<div class="d-flex align-items-center">' + 
-							'<img src="' + img_src + '" style="width:48px;height:48px;border-radius:50%;margin-right:10px"/>' +
-							'<div>' + 
-								'<h5 class="m-0 p-0">' + $('#profil-user-sidebar').children().eq(0).text() + '</h5>' +
-								'<p class="mt-1 mb-0">' + $('#profil-user-sidebar').children().eq(1).text() + '</p>' +
-							'</div>' + 
-						'</div><hr/>' +
-						'<ul class="list-menu-user mb-0">' + 
-							'<li>' + 
-								'<a class="d-flex align-items-center link-spa link-popup" data-placeholder="user-profil" href="' + base_url + 'builtin/user/edit?mobile=true">' +
-									'<i class="bi bi-person-vcard me-2 fs-3"></i>' + 
-									'<span>Profil</span>' + 
-								'</a>' + 
-							'</li>' + 
-							'<li>' + 
-								'<a class="d-flex align-items-center link-spa link-popup" data-placeholder="ubah-password" href="' + base_url + 'builtin/user/edit-password?mobile=true">' +
-									'<i class="bi bi-key me-2 fs-3"></i>' + 
-									'<span>Ubah Password</span>' + 
-								'</a>' + 
-							'</li>' + 
-							'<li>' + 
-								'<a class="d-flex align-items-center link-spa link-popup" href="' + base_url + 'login/logout?mobile=true">' +
-									'<i class="bi bi-box-arrow-right me-2 fs-3"></i>' + 
-									'<span>Logout</span>' + 
-								'</a>' + 
-							'</li>' + 
-						'</ul>' +
-					'</div>';
-					
-		$bootbox_popup = bootbox.dialog({
-			title: '',
-			message: menu_user,
-			buttons: {
-				cancel: {
-					label: 'Close'
-				}
-			}
-		})
-		
-		$('body').delegate('.link-popup', 'click', function() {
-			$bootbox_popup.modal('hide');
-		});
-	})
-
-	$.extend( $.fn.dataTable.defaults, {
-		"language": {
-			"processing": '<span><span class="spinner-border text-primary" role="status"></span></span>',
-			"previous": "Prev"
-		}
-	});
-
-	bootbox.setDefaults({
-		animate: false,
-		centerVertical : true
-	});
-	
-	let offcanvas_el = document.getElementById("offcanvasExample");
-	let offcanvas = new bootstrap.Offcanvas(offcanvas_el);
-		
-	$('#close-sidebar').click(function() {
-		offcanvas.hide();
-	});
-	
-	if ($('#dataTables-url').length) {
-		
-		let query_string = '';
-		let add_btn_config = false;
-		
-		if ($('#page-type').val() == 'kasir') {
-			if (setting_kasir.item_layout == 'grid') {
-				dataTables_settings.pageLength = setting_kasir.item_layout_grid_length;
-			} else {
-				dataTables_settings.pageLength = 10;
-			}
-						
-			query_string = '&id_gudang=' + $('#id-gudang').val() + '&id_jenis_harga=' + $('#id-jenis-harga').val();
-			add_btn_config = true;
-		}
-				
-		url = $('#dataTables-url').text() + query_string;
-		loadDataTables(url, add_btn_config);
-	}
-		
-	$(document).delegate('.number', 'keyup', function () {
-		this.value = format_ribuan(this.value);
-	})
-	
-	$('.sidebar-mobile').find('.nav-link').click(function() {
-		if (processing_page) {
-			return false;
-		}
-		$('.navbar-footer').find('.active').removeClass('active');
-	})
-	
-	$('.navbar-footer').find('.nav-link').click(function() {
-		$this = $(this);
-		if ($this.hasClass('nav-menu-mobile')) {
-			return;
-		}
-		if (processing_page) {
-			return false;
-		}
-		/* $('.navbar-footer').find('.active').removeClass('active');
-		$this.addClass('active'); */
-	});
-
-	$('#btn-logout').click(function(e){
-		$btn_logout = $(this);
-		$('.offcanvas-header').find('.btn-cole').trigger('click');
-		if (logout_tanpa_input_kas_akhir) {
-			$btn_logout.next().click();
-		} else {
-			bootbox.dialog({
-				message: 'Logout tanpa input kas akhir?',
-				buttons: {
-					cancel: { label: 'Cancel' },
-					success : {
-						label: 'Logout',
-						callback: function() {
-							$btn_logout.next().click();
-						}
-					}
-				}
-			})
-		}
-	})
-	
-	// Patrol functionality
-	initPatrolFunctionality();
-})
-
 // Patrol functionality
 function initPatrolFunctionality() {
 	let qrScanner = null;
@@ -1192,6 +13,11 @@ function initPatrolFunctionality() {
 	let activityCameraFacingMode = 'environment'; // 'environment' or 'user'
 	let activityPhotos = []; // Array to store multiple photos
 	let nextPatrolInfo = null;
+	
+	// Debouncing for QR code scanning (prevent multiple rapid scans)
+	let lastScannedCode = null;
+	let lastScanTime = 0;
+	const QR_SCAN_DEBOUNCE_MS = 2000; // Ignore same QR code for 2 seconds
 	const stepperPills = $('#activity-stepper .step-pill');
 	const qrInlineWrapper = $('#qr-inline-wrapper');
 	const qrModalPlaceholder = $('#qr-modal-placeholder');
@@ -1208,18 +34,17 @@ function initPatrolFunctionality() {
 	let flashMode = 'auto';
 	let torchSupported = false;
 	let cameraVideoTrack = null;
+	
+	// QR Scanner flash control
+	const qrFlashControlWrapper = $('#qr-flash-control-wrapper');
+	let qrFlashMode = 'auto';
+	let qrTorchSupported = false;
+	let qrCameraVideoTrack = null;
 	let lastSuccessfulFacingMode = activityCameraFacingMode;
 	let accordionCollapsedByCamera = false;
 	let wasAccordionOpenBeforeCamera = false;
 	let photoHighlightTimeout = null;
 	let isQrInModal = false;
-	const qrFlashControlWrapper = $('#qr-flash-control-wrapper');
-	let qrScannerFlashMode = 'auto';
-	let qrScannerTorchSupported = false;
-	let qrScannerVideoTrack = null;
-	let presensiFlashMode = 'auto';
-	let presensiTorchSupported = false;
-	let presensiVideoTrack = null;
 	let defaultQrStatusHtml = `
 		<div class="alert alert-info mb-0">
 			<i class="fas fa-search me-2"></i>
@@ -1337,59 +162,73 @@ function initPatrolFunctionality() {
 		});
 	}
 	
-	// Presensi Flash Control Functions
-	function hidePresensiFlashControl(message) {
-		const wrapper = $('#presensi-flash-control-wrapper');
-		if (!wrapper.length) {
+	// QR Scanner Flash Control Functions
+	function hideQRFlashControl(message) {
+		if (!qrFlashControlWrapper.length) {
 			return;
 		}
-		wrapper.hide();
+		qrFlashControlWrapper.hide();
 		if (message) {
-			$('#presensi-flash-support-text').text(message);
+			$('#qr-flash-support-text').text(message);
 		}
 	}
 	
-	function setupPresensiFlashControl() {
-		const wrapper = $('#presensi-flash-control-wrapper');
-		if (!wrapper.length || !presensiVideoTrack) {
+	function setupQRScannerFlashControl() {
+		if (!qrFlashControlWrapper.length || !qrCameraVideoTrack) {
 			return;
 		}
-		const capabilities = presensiVideoTrack.getCapabilities ? presensiVideoTrack.getCapabilities() : {};
-		presensiTorchSupported = !!capabilities.torch;
-		if (!presensiTorchSupported) {
-			hidePresensiFlashControl('Lampu tidak tersedia di perangkat ini.');
+		const capabilities = qrCameraVideoTrack.getCapabilities ? qrCameraVideoTrack.getCapabilities() : {};
+		qrTorchSupported = !!capabilities.torch;
+		if (!qrTorchSupported) {
+			hideQRFlashControl('Lampu tidak tersedia di perangkat ini.');
 			return;
 		}
-		wrapper.show();
-		$('#presensi-flash-support-text').text('Sesuaikan lampu saat mengambil foto.');
-		updatePresensiFlashButtons();
-		applyPresensiFlashMode(presensiFlashMode);
+		qrFlashControlWrapper.show();
+		$('#qr-flash-support-text').text('Sesuaikan lampu saat memindai QR code.');
+		updateQRScannerFlashButtons();
+		applyQRScannerFlashMode(qrFlashMode);
 	}
 	
-	function updatePresensiFlashButtons() {
-		const wrapper = $('#presensi-flash-control-wrapper');
-		if (!wrapper.length) {
+	function updateQRScannerFlashButtons() {
+		if (!qrFlashControlWrapper.length) {
 			return;
 		}
-		wrapper.find('.flash-toggle-presensi').removeClass('active');
-		wrapper.find(`.flash-toggle-presensi[data-flash-mode="${presensiFlashMode}"]`).addClass('active');
+		qrFlashControlWrapper.find('.flash-toggle-qr').removeClass('active');
+		qrFlashControlWrapper.find(`.flash-toggle-qr[data-flash-mode="${qrFlashMode}"]`).addClass('active');
 	}
 	
-	function applyPresensiFlashMode(mode) {
-		if (!presensiVideoTrack || !presensiTorchSupported) {
+	function applyQRScannerFlashMode(mode) {
+		if (!qrCameraVideoTrack || !qrTorchSupported) {
 			return;
 		}
 		if (mode === 'auto') {
-			presensiVideoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
+			qrCameraVideoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
 			return;
 		}
 		const torchOn = mode === 'on';
-		presensiVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(err => {
-			console.warn('Failed to set presensi torch:', err);
-			if (typeof Swal !== 'undefined') {
-				Swal.fire('Info', 'Tidak dapat mengubah lampu di perangkat ini.', 'info');
-			}
+		qrCameraVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(err => {
+			console.warn('Failed to set QR scanner torch:', err);
 		});
+	}
+	
+	function getQRScannerVideoTrack() {
+		if (!qrScanner) {
+			return null;
+		}
+		// Try to get video track from qr-reader element
+		const qrReaderElement = document.getElementById('qr-reader');
+		if (!qrReaderElement) {
+			return null;
+		}
+		const video = qrReaderElement.querySelector('video');
+		if (!video || !video.srcObject) {
+			return null;
+		}
+		const stream = video.srcObject;
+		if (!stream || !stream.getVideoTracks || stream.getVideoTracks().length === 0) {
+			return null;
+		}
+		return stream.getVideoTracks()[0];
 	}
 	
 	function storePatrolOptionsForCompany(companyId, patrols) {
@@ -1795,10 +634,12 @@ function initPatrolFunctionality() {
 	function stopQRScanner() {
 		return new Promise(resolve => {
 			try {
+				// Reset QR flash control
+				qrCameraVideoTrack = null;
+				qrTorchSupported = false;
+				hideQRFlashControl();
+				
 				if (!qrScanner) {
-					// Reset QR scanner flash control
-					qrScannerVideoTrack = null;
-					hideQRFlashControl();
 					resolve();
 					return;
 				}
@@ -1808,15 +649,9 @@ function initPatrolFunctionality() {
 							qrScanner.clear();
 						} catch (e) {}
 						qrScanner = null;
-						// Reset QR scanner flash control
-						qrScannerVideoTrack = null;
-						hideQRFlashControl();
 						resolve();
 					}).catch(() => {
 						qrScanner = null;
-						// Reset QR scanner flash control
-						qrScannerVideoTrack = null;
-						hideQRFlashControl();
 						resolve();
 					});
 				} else {
@@ -1824,16 +659,10 @@ function initPatrolFunctionality() {
 						qrScanner.clear();
 					} catch (e) {}
 					qrScanner = null;
-					// Reset QR scanner flash control
-					qrScannerVideoTrack = null;
-					hideQRFlashControl();
 					resolve();
 				}
 			} catch (e) {
 				qrScanner = null;
-				// Reset QR scanner flash control
-				qrScannerVideoTrack = null;
-				hideQRFlashControl();
 				resolve();
 			}
 		});
@@ -1842,6 +671,11 @@ function initPatrolFunctionality() {
 	function resetQrInlineStatus() {
 		$('#qr-result').hide();
 		$('#qr-scanning-status').html(defaultQrStatusHtml);
+		// Reset flash control
+		qrFlashMode = 'auto';
+		qrCameraVideoTrack = null;
+		qrTorchSupported = false;
+		hideQRFlashControl();
 	}
 
 	function ensureInlineScanner(forceRestart = false) {
@@ -1861,6 +695,9 @@ function initPatrolFunctionality() {
 			startQRScanner();
 		}
 	}
+	
+	// Make ensureInlineScanner globally accessible for mobile-activity.js
+	window.ensureInlineScanner = ensureInlineScanner;
 
 	function moveScannerToModal() {
 		if (!qrInlineWrapper.length || !qrModalPlaceholder.length) {
@@ -1972,7 +809,7 @@ function initPatrolFunctionality() {
 			</div>
 			<div class="row">
 				<div class="col-6"><strong>Foto:</strong></div>
-				<div class="col-6">${foto ? '✓ Sudah diambil' : '✗ Belum diambil'}</div>
+				<div class="col-6">${foto ? 'Ô£ô Sudah diambil' : 'Ô£ù Belum diambil'}</div>
 			</div>
 		`;
 		
@@ -2209,67 +1046,17 @@ function initPatrolFunctionality() {
 		applyFlashMode(mode);
 	});
 	
-	// QR Scanner Flash Control Functions
-	function hideQRFlashControl(message) {
-		if (!qrFlashControlWrapper.length) {
-			return;
-		}
-		qrFlashControlWrapper.hide();
-		if (message) {
-			$('#qr-flash-support-text').text(message);
-		}
-	}
-	
-	function setupQRScannerFlashControl() {
-		if (!qrFlashControlWrapper.length || !qrScannerVideoTrack) {
-			return;
-		}
-		const capabilities = qrScannerVideoTrack.getCapabilities ? qrScannerVideoTrack.getCapabilities() : {};
-		qrScannerTorchSupported = !!capabilities.torch;
-		if (!qrScannerTorchSupported) {
-			hideQRFlashControl('Lampu tidak tersedia di perangkat ini.');
-			return;
-		}
-		qrFlashControlWrapper.show();
-		$('#qr-flash-support-text').text('Sesuaikan lampu saat memindai QR code.');
-		updateQRScannerFlashButtons();
-		applyQRScannerFlashMode(qrScannerFlashMode);
-	}
-	
-	function updateQRScannerFlashButtons() {
-		if (!qrFlashControlWrapper.length) {
-			return;
-		}
-		qrFlashControlWrapper.find('.flash-toggle-qr').removeClass('active');
-		qrFlashControlWrapper.find(`.flash-toggle-qr[data-flash-mode="${qrScannerFlashMode}"]`).addClass('active');
-	}
-	
-	function applyQRScannerFlashMode(mode) {
-		if (!qrScannerVideoTrack || !qrScannerTorchSupported) {
-			return;
-		}
-		if (mode === 'auto') {
-			qrScannerVideoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
-			return;
-		}
-		const torchOn = mode === 'on';
-		qrScannerVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(err => {
-			console.warn('Failed to set QR scanner torch:', err);
-			Swal.fire('Info', 'Tidak dapat mengubah lampu di perangkat ini.', 'info');
-		});
-	}
-	
-	// QR Scanner flash button click handlers
-	qrFlashControlWrapper.find('.flash-toggle-qr').on('click', function() {
+	// QR Scanner flash control button handlers
+	$(document).on('click', '.flash-toggle-qr', function() {
 		const mode = $(this).data('flash-mode');
 		if (!mode) {
 			return;
 		}
-		if (!qrScannerTorchSupported) {
+		if (!qrTorchSupported) {
 			Swal.fire('Info', 'Lampu tidak tersedia di perangkat ini.', 'info');
 			return;
 		}
-		qrScannerFlashMode = mode;
+		qrFlashMode = mode;
 		updateQRScannerFlashButtons();
 		applyQRScannerFlashMode(mode);
 	});
@@ -2575,40 +1362,32 @@ function initPatrolFunctionality() {
 				wrappedOnScanSuccess,
 				wrappedOnScanFailure
 			).then(() => {
-				// Hide loading, show scanning message
+				// Hide loading, show scanning message (WhatsApp Web style - continuous scanning)
 				$('#qr-scanning-status').html(`
-					<div class="alert alert-success">
-						<i class="fas fa-camera me-2"></i>
-						<strong>Kamera aktif!</strong>
+					<div class="alert alert-info">
+						<i class="fas fa-qrcode me-2"></i>
+						<strong>Memindai QR Code...</strong>
 						<br>
-						<small>Arahkan kamera ke QR code patrol</small>
-						<br>
-						<small class="text-muted">Klik tombol di bawah untuk capture QR code</small>
-					</div>
-					<div class="text-center mt-2">
-					<!--
-						<button type="button" class="btn btn-warning btn-sm" id="btn-manual-capture-qr">
-							<i class="fas fa-camera me-2"></i>Capture QR Code
-						</button>
-					-->
+						<small>Arahkan kamera ke QR code patrol. QR code akan terdeteksi otomatis.</small>
 					</div>
 				`);
 				
-				// Get video track from QR scanner for flash control
-				setTimeout(() => {
-					const qrReaderElement = document.getElementById('qr-reader');
-					if (qrReaderElement) {
-						const video = qrReaderElement.querySelector('video');
-						if (video && video.srcObject) {
-							const stream = video.srcObject;
-							const tracks = stream.getVideoTracks();
-							if (tracks.length > 0) {
-								qrScannerVideoTrack = tracks[0];
-								setupQRScannerFlashControl();
-							}
+				// Setup flash control for QR scanner
+				// Retry mechanism to get video track (may not be immediately available)
+				let retryCount = 0;
+				const maxRetries = 5;
+				const setupFlashRetry = setInterval(() => {
+					qrCameraVideoTrack = getQRScannerVideoTrack();
+					if (qrCameraVideoTrack) {
+						setupQRScannerFlashControl();
+						clearInterval(setupFlashRetry);
+					} else {
+						retryCount++;
+						if (retryCount >= maxRetries) {
+							clearInterval(setupFlashRetry);
 						}
 					}
-				}, 500); // Small delay to ensure video element is ready
+				}, 300); // Check every 300ms, up to 5 times
 				
 				// Add manual capture button handler
 				$('#btn-manual-capture-qr').off('click').on('click', function() {
@@ -2890,6 +1669,17 @@ function initPatrolFunctionality() {
 	
 	// QR scan success
 	function onScanSuccess(decodedText, decodedResult) {
+		// Debouncing: Prevent multiple rapid scans of the same QR code
+		const now = Date.now();
+		if (lastScannedCode === decodedText && (now - lastScanTime) < QR_SCAN_DEBOUNCE_MS) {
+			// Same QR code scanned too soon, ignore
+			return;
+		}
+		
+		// Update debounce tracking
+		lastScannedCode = decodedText;
+		lastScanTime = now;
+		
 		// Show immediate feedback
 		$('#qr-scanning-status').html(`
 			<div class="alert alert-warning">
@@ -2900,25 +1690,33 @@ function initPatrolFunctionality() {
 			</div>
 		`);
 		
-		// Stop scanner safely - wrapped in try-catch for safety
+		// Stop scanner temporarily to process the QR code
+		// Then restart it automatically (like WhatsApp Web) for continuous scanning
 		try {
 			if (qrScanner && qrScanner.isScanning && qrScanner.isScanning()) {
 				qrScanner.stop().then(() => {
-					try {
-						qrScanner.clear();
-					} catch(e) {
-						// Error clearing scanner - silently fail
-					}
+					// Handle detection on client-side
+					handlePatrolDetection(decodedText);
+					
+					// Auto-restart scanner after a short delay for continuous scanning (WhatsApp Web style)
+					setTimeout(() => {
+						// Only restart if we're still on step 1 and scanner is not running
+						if (currentStep === 1 && !isScannerRunning()) {
+							startQRScanner();
+						}
+					}, 1000);
 				}).catch(err => {
-					// Error stopping scanner - silently fail
+					// Error stopping scanner - still process the detection
+					handlePatrolDetection(decodedText);
 				});
+			} else {
+				// Scanner not running, just handle detection
+				handlePatrolDetection(decodedText);
 			}
 		} catch(e) {
-			// Error in scanner stop - silently fail
+			// Error in scanner stop - still process the detection
+			handlePatrolDetection(decodedText);
 		}
-		
-		// Handle detection on client-side
-		handlePatrolDetection(decodedText);
 	}
 	
 	// QR scan failure
@@ -3077,6 +1875,10 @@ function initPatrolFunctionality() {
 		
 		markPatrolAsScanned(matchedPatrol.id_patrol);
 		setNextPatrolInfo(getNextPendingPatrol());
+		
+		// Reset debounce tracking after successful scan
+		lastScannedCode = null;
+		lastScanTime = 0;
 		
 		setTimeout(() => {
 			showStep(2);

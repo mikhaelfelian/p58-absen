@@ -520,6 +520,184 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 <script>
 	var assignedCompanies = <?= json_encode($companies ?? []) ?>;
 	var assignedPatrols = <?= json_encode($companies_patrols ?? []) ?>;
+	
+	// Populate manual company select dropdown
+	function populateManualCompanyOptions() {
+		var select = document.getElementById('manual-company-select');
+		if (!select) {
+			console.error('Manual company select element not found');
+			return;
+		}
+		
+		if (typeof assignedCompanies === 'undefined') {
+			console.error('assignedCompanies is undefined');
+			return;
+		}
+		
+		if (!Array.isArray(assignedCompanies)) {
+			console.error('assignedCompanies is not an array:', typeof assignedCompanies);
+			return;
+		}
+		
+		if (assignedCompanies.length === 0) {
+			console.warn('No companies assigned to user');
+			return;
+		}
+		
+		console.log('Populating dropdown with', assignedCompanies.length, 'companies');
+		
+		// Clear existing options except the first one
+		select.innerHTML = '<option value="">-- Pilih Perusahaan --</option>';
+		
+		// Populate with assigned companies
+		for (var i = 0; i < assignedCompanies.length; i++) {
+			var company = assignedCompanies[i];
+			
+			// Handle both object and array formats - access properties directly
+			var companyId = null;
+			var companyName = null;
+			
+			// Try to get id_company
+			if (company.id_company !== undefined && company.id_company !== null) {
+				companyId = company.id_company;
+			}
+			
+			// Try to get nama_company
+			if (company.nama_company !== undefined && company.nama_company !== null) {
+				companyName = company.nama_company;
+			}
+			
+			if (!companyId) {
+				console.warn('Company at index', i, 'has no id_company. Full object:', JSON.stringify(company));
+				continue;
+			}
+			
+			var option = document.createElement('option');
+			option.value = companyId;
+			option.textContent = companyName || 'Perusahaan #' + companyId;
+			select.appendChild(option);
+			console.log('Added company option:', companyId, '-', companyName);
+		}
+		
+		console.log('Dropdown populated with', select.options.length - 1, 'companies');
+	}
+	
+	// Wait for jQuery to be available
+	function waitForJQuery(callback) {
+		if (typeof jQuery !== 'undefined') {
+			callback(jQuery);
+		} else {
+			setTimeout(function() {
+				waitForJQuery(callback);
+			}, 100);
+		}
+	}
+	
+	// Populate on page load
+	document.addEventListener('DOMContentLoaded', function() {
+		populateManualCompanyOptions();
+	});
+	
+	// Also populate when manual tab is shown - wait for jQuery
+	waitForJQuery(function($) {
+		$(document).ready(function() {
+			// Tab change event listener - populate dropdown when manual tab is shown
+			$('#company-detection-tabs button[data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
+				var targetTab = $(e.target).data('bs-target');
+				console.log('Tab shown:', targetTab);
+				if (targetTab === '#manual-detect-tab') {
+					console.log('Manual tab shown, populating dropdown...');
+					populateManualCompanyOptions();
+				}
+			});
+			
+			// Manual company selection dropdown change handler
+			$('#manual-company-select').on('change', function () {
+				var selectedValue = $(this).val();
+				var confirmBtn = $('#btn-confirm-manual-company');
+				console.log('Dropdown changed, selected value:', selectedValue);
+				if (selectedValue && selectedValue !== '') {
+					confirmBtn.prop('disabled', false);
+				} else {
+					confirmBtn.prop('disabled', true);
+				}
+			});
+			
+			// Manual company confirmation button handler
+			$('#btn-confirm-manual-company').on('click', function () {
+				var selectedCompanyId = $('#manual-company-select').val();
+				if (!selectedCompanyId) {
+					if (typeof Swal !== 'undefined') {
+						Swal.fire('Error', 'Pilih perusahaan terlebih dahulu.', 'error');
+					} else {
+						alert('Pilih perusahaan terlebih dahulu.');
+					}
+					return;
+				}
+				
+				// Find company data from assignedCompanies
+				var selectedCompany = null;
+				if (typeof assignedCompanies !== 'undefined' && Array.isArray(assignedCompanies)) {
+					for (var i = 0; i < assignedCompanies.length; i++) {
+						if (assignedCompanies[i].id_company == selectedCompanyId) {
+							selectedCompany = assignedCompanies[i];
+							break;
+						}
+					}
+				}
+				
+				if (!selectedCompany) {
+					if (typeof Swal !== 'undefined') {
+						Swal.fire('Error', 'Data perusahaan tidak ditemukan.', 'error');
+					} else {
+						alert('Data perusahaan tidak ditemukan.');
+					}
+					return;
+				}
+				
+				// Set company ID in hidden field
+				$('#id_company').val(selectedCompanyId);
+				
+				// Set detected coordinates (use company location or current GPS if available)
+				var detectedLat = selectedCompany.latitude || '';
+				var detectedLng = selectedCompany.longitude || '';
+				$('#detected-latitude').val(detectedLat);
+				$('#detected-longitude').val(detectedLng);
+				
+				// Show success message
+				$('#company-detecting').hide();
+				$('#company-not-found').hide();
+				$('#company-detected').show();
+				$('#detected-company-name').text(selectedCompany.nama_company || 'Perusahaan');
+				$('#detected-company-distance').text('Dipilih secara manual');
+				
+				// Trigger companyDetected event
+				var event = new CustomEvent('companyDetected', {
+					detail: {
+						companyId: selectedCompanyId,
+						company: selectedCompany
+					}
+				});
+				window.dispatchEvent(event);
+				
+				// Switch to auto-detect tab to show the detected company
+				var tabButton = $('#company-detection-tabs button[data-bs-target="#auto-detect-tab"]');
+				if (tabButton.length && typeof tabButton.tab === 'function') {
+					tabButton.tab('show');
+				}
+				
+				if (typeof Swal !== 'undefined') {
+					Swal.fire({
+						icon: 'success',
+						title: 'Perusahaan Dipilih',
+						text: selectedCompany.nama_company + ' telah dipilih.',
+						timer: 2000,
+						showConfirmButton: false
+					});
+				}
+			});
+		});
+	});
 </script>
 
 <!-- QR Scanner Modal for fullscreen fallback -->

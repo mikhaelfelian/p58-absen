@@ -3,197 +3,179 @@
 <?php
 $nama_bulan = nama_bulan();
 $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-// echo date('j'); die;
-/* echo '<pre>';
-print_r($setting_aplikasi);
-die; */
 ?>
 <div class="container py-4">
 	<!-- Header: User info -->
 	<div class="text-center text-light mb-3">
-		<h5 class="fw-semibold mb-1"><?=$user['nama']?></h5>
-		<p class="mb-0 small opacity-75"><?=$data_setelah_nama_user?></p>
+		<h5 class="fw-semibold mb-1"><?= $user['nama'] ?></h5>
+		<p class="mb-0 small opacity-75"><?= $data_setelah_nama_user ?></p>
 	</div>
 
 	<!-- Current date & time -->
 	<div class="bg-light text-dark p-3 rounded-3 shadow-sm mb-4">
 		<div class="d-flex justify-content-between align-items-center">
 			<div class="hari-tanggal fw-semibold">
-				<?=$nama_hari[date('w')] . ', ' . date('d') . ' ' . $nama_bulan[date('n')] . ' ' . date('Y')?>
+				<?= $nama_hari[date('w')] . ', ' . date('d') . ' ' . $nama_bulan[date('n')] . ' ' . date('Y') ?>
 			</div>
 			<div class="text-end">
 				<div class="small text-muted">Waktu sekarang</div>
-				<div class="fw-semibold fs-5" id="live-jam"><?=date('H:i:s')?></div>
+				<div class="fw-semibold fs-5" id="live-jam"><?= date('H:i:s') ?></div>
 			</div>
 		</div>
 	</div>
-	
-	<?php 
-	// Debug: Check what we have
-	$companies_count = is_array($companies) ? count($companies) : (is_object($companies) ? count((array)$companies) : 0);
+
+	<?php
+	$companies_count = is_array($companies) ? count($companies) : (is_object($companies) ? count((array) $companies) : 0);
 	log_message('debug', 'mobile-presensi-home: companies variable type=' . gettype($companies) . ', count=' . $companies_count);
 	if (isset($companies) && !empty($companies)) {
 		log_message('debug', 'mobile-presensi-home: First company id=' . (isset($companies[0]) ? ($companies[0]->id_company ?? 'NO ID') : 'NO FIRST'));
 	}
 	?>
 	<?php if (empty($companies)): ?>
-	<div class="alert alert-warning shadow-sm border-0 rounded-3">
-		<div class="d-flex">
-			<div class="me-3 d-flex align-items-start">
-				<i class="fas fa-exclamation-triangle fs-5 mt-1"></i>
-			</div>
-			<div>
-				<div class="fw-semibold mb-1">Belum ada penugasan perusahaan</div>
-				<div class="small mb-0">
-					Anda belum di-assign ke perusahaan manapun. Silakan hubungi admin untuk melakukan penugasan.
+		<div class="alert alert-warning shadow-sm border-0 rounded-3">
+			<div class="d-flex">
+				<div class="me-3 d-flex align-items-start">
+					<i class="fas fa-exclamation-triangle fs-5 mt-1"></i>
 				</div>
-				<?php if (isset($debug_info) && !empty($debug_info)): ?>
-				<div class="mt-2">
-					<small class="text-muted">
-						Debug: Total penugasan ditemukan: <?=$debug_info['total_assignments']?>,
-						Perusahaan aktif: <?=$debug_info['active_companies']?>
-					</small>
+				<div>
+					<div class="fw-semibold mb-1">Belum ada penugasan perusahaan</div>
+					<div class="small mb-0">
+						Anda belum di-assign ke perusahaan manapun. Silakan hubungi admin untuk melakukan penugasan.
+					</div>
+					<?php if (isset($debug_info) && !empty($debug_info)): ?>
+						<div class="mt-2">
+							<small class="text-muted">
+								Debug: Total penugasan ditemukan: <?= $debug_info['total_assignments'] ?>,
+								Perusahaan aktif: <?= $debug_info['active_companies'] ?>
+							</small>
+						</div>
+					<?php endif; ?>
 				</div>
-				<?php endif; ?>
 			</div>
 		</div>
-	</div>
-
 	<?php else: ?>
-	<?php
-	// Check if user has an active shift based on latest record (no date filtering)
-	$last = $last_presensi ?? null;
-	$active_company_id = null;
-	$active_company_name = '';
-	$is_readonly = false;
-	
-	// Convert to array if object for consistent access
-	if ($last && is_object($last)) {
-		$last = (array) $last;
-	}
-	
-	// If latest record has tgl_keluar IS NULL → user is in active shift
-	if ($last && empty($last['tgl_keluar'])) {
-		$active_company_id = $last['id_company'] ?? null;
-		$is_readonly = true;
-		// Get company name
-		foreach ($companies as $comp) {
-			if ($comp->id_company == $active_company_id) {
-				$active_company_name = $comp->nama_company;
-				break;
+		<?php
+		$last = $last_presensi ?? null;
+		$active_company_id = null;
+		$active_company_name = '';
+		$is_readonly = false;
+		if ($last && is_object($last)) {
+			$last = (array) $last;
+		}
+		if ($last && empty($last['tgl_keluar'])) {
+			$active_company_id = $last['id_company'] ?? null;
+			$is_readonly = true;
+			foreach ($companies as $comp) {
+				if ($comp->id_company == $active_company_id) {
+					$active_company_name = $comp->nama_company;
+					break;
+				}
 			}
 		}
-	}
-	?>
-	<!-- Company selection -->
-	<div class="bg-light p-3 mb-4 rounded-3 shadow-sm">
-		<div class="d-flex justify-content-between align-items-center mb-2">
-			<label class="form-label mb-0 fw-semibold">Lokasi Perusahaan</label>
-			<small class="text-muted">Pilih perusahaan tempat Anda bertugas</small>
-		</div>
-		<?php if ($is_readonly): ?>
-		<input type="text" class="form-control" value="<?=$active_company_name?>" readonly>
-		<input type="hidden" id="id_company" name="id_company" value="<?=$active_company_id?>">
-		<small class="text-success d-block mt-2">
-			<i class="fas fa-lock me-1"></i>
-			Perusahaan sudah terpilih untuk shift aktif dan tidak dapat diubah setelah absen masuk.
-		</small>
-		<?php else: ?>
-		<!-- Company Detection with Tabs -->
-		<div class="detection-wrapper">
-			<ul class="nav nav-pills nav-fill mb-3" id="company-detection-tabs" role="tablist" style="position: relative; z-index: 10;">
-				<li class="nav-item" role="presentation">
-					<button class="nav-link active fw-semibold" data-bs-toggle="pill" type="button" data-bs-target="#auto-detect-tab">
-						<i class="fas fa-location-crosshairs me-2"></i>Auto GPS
-					</button>
-				</li>
-				<li class="nav-item" role="presentation">
-					<button class="nav-link fw-semibold" data-bs-toggle="pill" type="button" data-bs-target="#manual-detect-tab">
-						<i class="fas fa-list-ul me-2"></i>Pilih Manual
-					</button>
-				</li>
-			</ul>
-			<div class="tab-content border rounded-3 p-3 bg-white">
-				<div class="tab-pane fade show active" id="auto-detect-tab">
-					<!-- Auto-detect company based on GPS location -->
-					<div id="company-detecting" class="text-center py-4">
-						<div class="spinner-border text-primary" role="status">
-							<span class="visually-hidden">Memuat...</span>
-						</div>
-						<p class="mt-3 mb-0 small text-muted">Mendeteksi lokasi Anda menggunakan GPS...</p>
-					</div>
-					<div id="company-detected" style="display:none;">
-						<div class="alert alert-success mb-0 rounded-3">
-							<i class="fas fa-map-marker-alt me-2"></i>
-							<strong id="detected-company-name"></strong>
-							<span id="detected-company-setting" class="badge bg-info ms-2" style="display:none;"></span>
-							<br>
-							<small id="detected-company-distance" class="text-muted"></small>
-						</div>
-					</div>
-					<div id="company-not-found" style="display:none;">
-						<div class="alert alert-danger mb-0 rounded-3">
-							<i class="fas fa-exclamation-triangle me-2"></i>
-							<strong>Anda tidak berada di lokasi perusahaan manapun!</strong>
-							<br>
-							<small>Silakan pergi ke lokasi perusahaan yang sudah ditugaskan atau gunakan tab
-								<span class="fw-semibold">Pilih Manual</span>.</small>
-						</div>
-					</div>
-				</div>
-				<div class="tab-pane fade" id="manual-detect-tab">
-					<div class="alert alert-warning rounded-3">
-						<div class="d-flex">
-							<div class="me-3 d-flex align-items-start">
-								<i class="fas fa-info-circle mt-1"></i>
-							</div>
-							<div class="small">
-								<div class="fw-semibold mb-1">GPS sulit mendeteksi lokasi?</div>
-								<div>Pilih perusahaan secara manual dari daftar di bawah.</div>
-							</div>
-						</div>
-					</div>
-					<div class="mb-3">
-						<label class="form-label fw-semibold">Pilih Perusahaan</label>
-						<select class="form-select" id="manual-company-select">
-							<option value="">-- Pilih Perusahaan --</option>
-						</select>
-					</div>
-					<button type="button" class="btn btn-primary w-100" id="btn-confirm-manual-company" disabled>
-						<i class="fas fa-check me-2"></i>Gunakan
-					</button>
-				</div>
+		?>
+		<!-- Company selection -->
+		<div class="bg-light p-3 mb-4 rounded-3 shadow-sm">
+			<div class="d-flex justify-content-between align-items-center mb-2">
+				<label class="form-label mb-0 fw-semibold">Lokasi Perusahaan</label>
+				<small class="text-muted">Pilih perusahaan tempat Anda bertugas</small>
 			</div>
+			<?php if ($is_readonly): ?>
+				<input type="text" class="form-control" value="<?= $active_company_name ?>" readonly>
+				<input type="hidden" id="id_company" name="id_company" value="<?= $active_company_id ?>">
+				<small class="text-success d-block mt-2">
+					<i class="fas fa-lock me-1"></i>
+					Perusahaan sudah terpilih untuk shift aktif dan tidak dapat diubah setelah absen masuk.
+				</small>
+			<?php else: ?>
+				<!-- Company Detection with Tabs -->
+				<div class="detection-wrapper">
+					<ul class="nav nav-pills nav-fill mb-3" id="company-detection-tabs" role="tablist"
+						style="position: relative; z-index: 10;">
+						<li class="nav-item" role="presentation">
+							<button class="nav-link active fw-semibold" data-bs-toggle="pill" type="button"
+								data-bs-target="#auto-detect-tab">
+								<i class="fas fa-location-crosshairs me-2"></i>Auto GPS
+							</button>
+						</li>
+						<li class="nav-item" role="presentation">
+							<button class="nav-link fw-semibold" data-bs-toggle="pill" type="button"
+								data-bs-target="#manual-detect-tab">
+								<i class="fas fa-list-ul me-2"></i>Pilih Manual
+							</button>
+						</li>
+					</ul>
+					<div class="tab-content border rounded-3 p-3 bg-white">
+						<div class="tab-pane fade show active" id="auto-detect-tab">
+							<!-- Auto-detect company based on GPS location -->
+							<div id="company-detecting" class="text-center py-4">
+								<div class="spinner-border text-primary" role="status">
+									<span class="visually-hidden">Memuat...</span>
+								</div>
+								<p class="mt-3 mb-0 small text-muted">Mendeteksi lokasi Anda menggunakan GPS...</p>
+							</div>
+							<div id="company-detected" style="display:none;">
+								<div class="alert alert-success mb-0 rounded-3">
+									<i class="fas fa-map-marker-alt me-2"></i>
+									<strong id="detected-company-name"></strong>
+									<span id="detected-company-setting" class="badge bg-info ms-2" style="display:none;"></span>
+									<br>
+									<small id="detected-company-distance" class="text-muted"></small>
+								</div>
+							</div>
+							<div id="company-not-found" style="display:none;">
+								<div class="alert alert-danger mb-0 rounded-3">
+									<i class="fas fa-exclamation-triangle me-2"></i>
+									<strong>Anda tidak berada di lokasi perusahaan manapun!</strong>
+									<br>
+									<small>Silakan pergi ke lokasi perusahaan yang sudah ditugaskan atau gunakan tab
+										<span class="fw-semibold">Pilih Manual</span>.</small>
+								</div>
+							</div>
+						</div>
+						<div class="tab-pane fade" id="manual-detect-tab">
+							<div class="alert alert-warning rounded-3">
+								<div class="d-flex">
+									<div class="me-3 d-flex align-items-start">
+										<i class="fas fa-info-circle mt-1"></i>
+									</div>
+									<div class="small">
+										<div class="fw-semibold mb-1">GPS sulit mendeteksi lokasi?</div>
+										<div>Pilih perusahaan secara manual dari daftar di bawah.</div>
+									</div>
+								</div>
+							</div>
+							<div class="mb-3">
+								<label class="form-label fw-semibold">Pilih Perusahaan</label>
+								<select class="form-select" id="manual-company-select">
+									<!-- Option elements will be filled in JS. This fixes load/target issues. -->
+								</select>
+							</div>
+							<button type="button" class="btn btn-primary w-100" id="btn-confirm-manual-company" disabled>
+								<i class="fas fa-check me-2"></i>Gunakan
+							</button>
+						</div>
+					</div>
+				</div>
+				<input type="hidden" id="id_company" name="id_company" value="">
+				<input type="hidden" id="detected-latitude" value="">
+				<input type="hidden" id="detected-longitude" value="">
+			<?php endif; ?>
 		</div>
-		<input type="hidden" id="id_company" name="id_company" value="">
-		<input type="hidden" id="detected-latitude" value="">
-		<input type="hidden" id="detected-longitude" value="">
-		<?php endif; ?>
-	</div>
-	
-	<!-- Store companies data for JavaScript -->
-	<script>
-	var assignedCompanies = <?=json_encode($companies ?? [])?>;
-	console.log('assignedCompanies loaded:', assignedCompanies);
-	console.log('assignedCompanies type:', typeof assignedCompanies);
-	console.log('assignedCompanies length:', assignedCompanies ? assignedCompanies.length : 'N/A');
-	if (assignedCompanies && assignedCompanies.length > 0) {
-		console.log('First company sample:', assignedCompanies[0]);
-	}
-	</script>
+
+		<!-- Store companies data for JavaScript -->
+		<script>
+			var assignedCompanies = <?= json_encode($companies ?? []) ?>;
+		</script>
 	<?php endif; ?>
-	
+
 	<?php
-	// Get company-specific settings (use first company as default for now)
 	$company_setting = null;
 	if (!empty($companies)) {
 		$company_setting = $companies[0]->setting_data ?? null;
 	}
-	
-	// Fallback to global setting if no company setting
 	if (!$company_setting) {
 		$company_setting = [
-			'hari_kerja' => json_decode($setting_presensi['hari_kerja'], true) ?: [1,2,3,4,5],
+			'hari_kerja' => json_decode($setting_presensi['hari_kerja'], true) ?: [1, 2, 3, 4, 5],
 			'gunakan_foto_selfi' => $setting_presensi['gunakan_foto_selfi'] ?? 'Y',
 			'gunakan_radius_lokasi' => $setting_presensi['gunakan_radius_lokasi'] ?? 'Y',
 			'latitude' => $setting_presensi['latitude'] ?? '-7.797068',
@@ -202,8 +184,6 @@ die; */
 			'radius_satuan' => $setting_presensi['radius_satuan'] ?? 'km'
 		];
 	}
-	
-	// Debug: Show company setting hari_kerja
 	if (isset($_GET['debug'])) {
 		echo '<div class="alert alert-info">';
 		echo '<h6>Informasi Debug:</h6>';
@@ -218,104 +198,95 @@ die; */
 		}
 		echo '</div>';
 	}
-	
-	// Determine waktu_masuk and waktu_pulang from latest record (no date filtering)
 	$waktu_masuk = $waktu_pulang = 'Belum absen';
 	$tanggal_masuk = $tanggal_pulang = '';
-	
-	// Ensure $last is array for consistent access
 	$last_array = $last;
 	if ($last && is_object($last)) {
 		$last_array = (array) $last;
 	}
-	
 	if ($last_array) {
-		// If latest record has tgl_keluar IS NULL → show active shift
 		if (empty($last_array['tgl_keluar'])) {
-			// Extract time and date from tgl_masuk DATETIME
 			if (!empty($last_array['tgl_masuk'])) {
-				$waktu_masuk = date('H:i', strtotime($last_array['tgl_masuk'])); // HH:MM format
+				$waktu_masuk = date('H:i', strtotime($last_array['tgl_masuk']));
 				$tanggal_masuk = date('d/m/Y', strtotime($last_array['tgl_masuk']));
 			}
 		}
-		// If latest record has tgl_keluar → show completed shift
 		else if (!empty($last_array['tgl_keluar'])) {
-			// Extract time and date from tgl_keluar DATETIME
-			$waktu_pulang = date('H:i', strtotime($last_array['tgl_keluar'])); // HH:MM format
+			$waktu_pulang = date('H:i', strtotime($last_array['tgl_keluar']));
 			$tanggal_pulang = date('d/m/Y', strtotime($last_array['tgl_keluar']));
-			// Also show masuk time from tgl_masuk
 			if (!empty($last_array['tgl_masuk'])) {
 				$waktu_masuk = date('H:i', strtotime($last_array['tgl_masuk']));
 				$tanggal_masuk = date('d/m/Y', strtotime($last_array['tgl_masuk']));
 			}
 		}
 	}
-	
-	// Check if today is a working day
-	$today_day_of_week = date('w'); // 0 = Sunday, 1 = Monday, etc.
+	$today_day_of_week = date('w');
 	$is_today_working_day = in_array($today_day_of_week, $company_setting['hari_kerja']);
 	?>
-	
+
 	<?php if (!$is_today_working_day): ?>
-	<div class="alert alert-info text-center shadow-sm border-0 rounded-3">
-		<i class="fas fa-calendar-times me-2"></i>
-		<strong>Hari ini bukan hari kerja</strong><br>
-		<small>Presensi hanya dapat dilakukan pada hari kerja yang telah ditentukan.</small>
-	</div>
+		<div class="alert alert-info text-center shadow-sm border-0 rounded-3">
+			<i class="fas fa-calendar-times me-2"></i>
+			<strong>Hari ini bukan hari kerja</strong><br>
+			<small>Presensi hanya dapat dilakukan pada hari kerja yang telah ditentukan.</small>
+		</div>
 	<?php else: ?>
-	<div id="presensi-buttons-container">
-		<div class="bg-light rounded-3 shadow-sm p-3 mb-3">
-			<div class="row g-2">
-				<div class="col-6">
-					<a id="presensi-masuk" href="#" class="presensi-container box-absen-masuk d-flex rounded-3 px-3 py-3 w-100">
-						<div class="d-flex align-items-center w-100">
-							<i class="bi bi-box-arrow-in-right me-3 text-success icon-box-presensi" style="font-size:30px"></i>
-							<div class="w-100">
-								<div class="d-flex justify-content-between align-items-center">
-									<h6 class="m-0 fw-semibold">Masuk</h6>
+		<div id="presensi-buttons-container">
+			<div class="bg-light rounded-3 shadow-sm p-3 mb-3">
+				<div class="row g-2">
+					<div class="col-6">
+						<a id="presensi-masuk" href="#"
+							class="presensi-container box-absen-masuk d-flex rounded-3 px-3 py-3 w-100">
+							<div class="d-flex align-items-center w-100">
+								<i class="bi bi-box-arrow-in-right me-3 text-success icon-box-presensi"
+									style="font-size:30px"></i>
+								<div class="w-100">
+									<div class="d-flex justify-content-between align-items-center">
+										<h6 class="m-0 fw-semibold">Masuk</h6>
+									</div>
+									<p class="mt-1 mb-0 waktu-presensi fs-5 fw-semibold"><?= $waktu_masuk ?></p>
+									<?php if ($tanggal_masuk): ?>
+										<p class="mt-1 mb-0 text-muted small"><?= $tanggal_masuk ?></p>
+									<?php endif; ?>
+									<?php
+									$jam_kerja_target = 12;
+									if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
+										$jam_kerja_target = intval($companies[0]->jam_kerja_target);
+									}
+									?>
 								</div>
-								<p class="mt-1 mb-0 waktu-presensi fs-5 fw-semibold"><?=$waktu_masuk?></p>
-								<?php if ($tanggal_masuk): ?>
-								<p class="mt-1 mb-0 text-muted small"><?=$tanggal_masuk?></p>
-								<?php endif; ?>
-								<?php
-								// Show jam kerja target requirement
-								$jam_kerja_target = 12; // Default
-								if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
-									$jam_kerja_target = intval($companies[0]->jam_kerja_target);
-								}
-								?>
 							</div>
-						</div>
-					</a>
-				</div>
-				<div class="col-6">
-					<a id="presensi-pulang" href="#" class="bg-light presensi-container box-absen-pulang rounded-3 px-3 py-3 d-block" style="background:#fff6e8 !important;">
-						<div class="d-flex align-items-center">
-							<i class="bi bi-box-arrow-right me-3 text-warning icon-box-presensi" style="font-size:27px"></i>
-							<div class="w-100">
-								<div class="d-flex justify-content-between align-items-center">
-									<h6 class="m-0 fw-semibold">Pulang</h6>
+						</a>
+					</div>
+					<div class="col-6">
+						<a id="presensi-pulang" href="#"
+							class="bg-light presensi-container box-absen-pulang rounded-3 px-3 py-3 d-block"
+							style="background:#fff6e8 !important;">
+							<div class="d-flex align-items-center">
+								<i class="bi bi-box-arrow-right me-3 text-warning icon-box-presensi"
+									style="font-size:27px"></i>
+								<div class="w-100">
+									<div class="d-flex justify-content-between align-items-center">
+										<h6 class="m-0 fw-semibold">Pulang</h6>
+									</div>
+									<p class="mt-1 mb-0 waktu-presensi fs-5 fw-semibold"><?= $waktu_pulang ?></p>
+									<?php if ($tanggal_pulang): ?>
+										<p class="mt-1 mb-0 text-muted small"><?= $tanggal_pulang ?></p>
+									<?php endif; ?>
+									<?php
+									$jam_kerja_target = 12;
+									if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
+										$jam_kerja_target = intval($companies[0]->jam_kerja_target);
+									}
+									?>
 								</div>
-								<p class="mt-1 mb-0 waktu-presensi fs-5 fw-semibold"><?=$waktu_pulang?></p>
-								<?php if ($tanggal_pulang): ?>
-								<p class="mt-1 mb-0 text-muted small"><?=$tanggal_pulang?></p>
-								<?php endif; ?>
-								<?php
-								// Show jam kerja target requirement
-								$jam_kerja_target = 12; // Default
-								if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
-									$jam_kerja_target = intval($companies[0]->jam_kerja_target);
-								}
-								?>
 							</div>
-						</div>
-					</a>
+						</a>
+					</div>
 				</div>
 			</div>
+			<div id="alert-lokasi"></div>
 		</div>
-		<div id="alert-lokasi"></div>
-	</div>
 	<?php endif; ?>
 
 	<!-- Riwayat presensi -->
@@ -343,21 +314,17 @@ die; */
 						$nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 						$end_date = strtotime(date('Y-m-d'));
 						$start_date = strtotime('-' . $setting_presensi['jml_riwayat_presensi_home'] . ' days', $end_date);
-						$hari_kerja = $company_setting['hari_kerja'] ?? [1,2,3,4,5];
+						$hari_kerja = $company_setting['hari_kerja'] ?? [1, 2, 3, 4, 5];
 						$no = 1;
-						
-						// Collect all attendance records
 						$attendance_records = [];
 						for ($i = $end_date; $i > $start_date; $i = strtotime('-1 day', $i)) {
 							$curr = date('Y-m-d', $i);
 							$date_w = date('w', $i);
-							
 							if (in_array($date_w, $hari_kerja) && key_exists($curr, $riwayat_presensi)) {
 								$presensi_masuk = $riwayat_presensi[$curr]['masuk']['presensi_masuk'] ?? null;
 								$presensi_pulang = $riwayat_presensi[$curr]['pulang']['presensi_pulang'] ?? null;
 								$durasi = $riwayat_presensi[$curr]['durasi'] ?? null;
 								$is_valid = $riwayat_presensi[$curr]['is_valid'] ?? 0;
-								
 								if ($presensi_masuk || $presensi_pulang) {
 									$attendance_records[] = [
 										'date' => $curr,
@@ -369,54 +336,38 @@ die; */
 								}
 							}
 						}
-						
-						// Display records in table
 						if (empty($attendance_records)) {
 							echo '<tr><td colspan="5" class="text-center text-muted py-4">Tidak ada data presensi untuk periode ini</td></tr>';
 						} else {
 							foreach ($attendance_records as $record) {
-								// Format waktu masuk
 								$waktu_masuk_display = '-';
 								if ($record['masuk']) {
-									$waktu_masuk_time = substr($record['masuk'], 0, 5); // Get HH:MM
+									$waktu_masuk_time = substr($record['masuk'], 0, 5);
 									$waktu_masuk_display = '<span>' . $waktu_masuk_time . '</span>';
 								}
-								
-								// Format waktu pulang
 								$waktu_pulang_display = '-';
 								if ($record['pulang']) {
-									$waktu_pulang_time = substr($record['pulang'], 0, 5); // Get HH:MM
+									$waktu_pulang_time = substr($record['pulang'], 0, 5);
 									$waktu_pulang_display = '<span>' . $waktu_pulang_time . '</span>';
 								}
-								
-								// Determine date display (check if crosses midnight)
 								$tanggal_display = date('d/m/Y', strtotime($record['date']));
 								if ($record['masuk'] && $record['pulang']) {
-									// Check if pulang time is earlier than masuk time (crosses midnight)
 									$masuk_timestamp = strtotime($record['date'] . ' ' . $record['masuk']);
 									$pulang_timestamp = strtotime($record['date'] . ' ' . $record['pulang']);
-									
-									// If pulang is before masuk, it means it crossed midnight
 									if ($pulang_timestamp < $masuk_timestamp) {
 										$pulang_date = date('Y-m-d', strtotime($record['date'] . ' +1 day'));
 										$tanggal_display = date('d/m/Y', strtotime($record['date'])) . ' - ' . date('d/m/Y', strtotime($pulang_date));
 									}
 								}
-								
-								// Format jam kerja
 								$jam_kerja_display = '-';
 								if ($record['durasi'] !== null && $record['durasi'] > 0) {
 									$durasi_formatted = number_format($record['durasi'], 2);
-									// Remove trailing zeros
 									$durasi_formatted = rtrim(rtrim($durasi_formatted, '0'), '.');
 									$jam_kerja_display = $durasi_formatted . ' jam';
-									
-									// Add validation badge
 									$valid_class = $record['is_valid'] ? 'bg-success' : 'bg-warning';
 									$valid_text = $record['is_valid'] ? 'Valid' : 'Tidak Valid';
 									$jam_kerja_display .= ' <span class="badge ' . $valid_class . ' ms-1">' . $valid_text . '</span>';
 								}
-								
 								echo '<tr>';
 								echo '<td class="text-center fw-semibold">' . $no . '</td>';
 								echo '<td class="fw-medium">' . $tanggal_display . '</td>';
@@ -424,7 +375,6 @@ die; */
 								echo '<td class="text-center">' . $waktu_pulang_display . '</td>';
 								echo '<td class="text-center">' . $jam_kerja_display . '</td>';
 								echo '</tr>';
-								
 								$no++;
 							}
 						}
@@ -434,131 +384,120 @@ die; */
 			</div>
 		</div>
 	</div>
-	<input type="hidden" id="page-type" value="kasir"/>
-	<input type="hidden" id="selected-company-id" value=""/>
-	<input type="hidden" id="selected-company-lat" value=""/>
-	<input type="hidden" id="selected-company-lng" value=""/>
-	<input type="hidden" id="selected-company-radius" value=""/>
-	<input type="hidden" id="selected-company-satuan" value=""/>
-	
+	<input type="hidden" id="page-type" value="kasir" />
+	<input type="hidden" id="selected-company-id" value="" />
+	<input type="hidden" id="selected-company-lat" value="" />
+	<input type="hidden" id="selected-company-lng" value="" />
+	<input type="hidden" id="selected-company-radius" value="" />
+	<input type="hidden" id="selected-company-satuan" value="" />
+
 	<?php if ($is_readonly && $active_company_id): ?>
-	<!-- Populate company location fields for active shift -->
-	<script>
-	(function() {
-		var activeCompanyId = <?=$active_company_id?>;
-		if (typeof assignedCompanies !== 'undefined' && assignedCompanies && Array.isArray(assignedCompanies)) {
-			for (var i = 0; i < assignedCompanies.length; i++) {
-				var company = assignedCompanies[i];
-				if (company.id_company == activeCompanyId) {
-					// Set company location fields for active shift
-					var latField = document.getElementById('selected-company-lat');
-					var lngField = document.getElementById('selected-company-lng');
-					var idField = document.getElementById('selected-company-id');
-					var radiusField = document.getElementById('selected-company-radius');
-					var satuanField = document.getElementById('selected-company-satuan');
-					
-					if (latField && company.latitude) {
-						latField.value = company.latitude;
+		<!-- Populate company location fields for active shift -->
+		<script>
+			(function () {
+				var activeCompanyId = <?= $active_company_id ?>;
+				if (typeof assignedCompanies !== 'undefined' && assignedCompanies && Array.isArray(assignedCompanies)) {
+					for (var i = 0; i < assignedCompanies.length; i++) {
+						var company = assignedCompanies[i];
+						if (company.id_company == activeCompanyId) {
+							var latField = document.getElementById('selected-company-lat');
+							var lngField = document.getElementById('selected-company-lng');
+							var idField = document.getElementById('selected-company-id');
+							var radiusField = document.getElementById('selected-company-radius');
+							var satuanField = document.getElementById('selected-company-satuan');
+							if (latField && company.latitude) {
+								latField.value = company.latitude;
+							}
+							if (lngField && company.longitude) {
+								lngField.value = company.longitude;
+							}
+							if (idField) {
+								idField.value = company.id_company;
+							}
+							if (radiusField && company.radius_nilai) {
+								radiusField.value = company.radius_nilai;
+							}
+							if (satuanField && company.radius_satuan) {
+								satuanField.value = company.radius_satuan;
+							}
+							break;
+						}
 					}
-					if (lngField && company.longitude) {
-						lngField.value = company.longitude;
-					}
-					if (idField) {
-						idField.value = company.id_company;
-					}
-					if (radiusField && company.radius_nilai) {
-						radiusField.value = company.radius_nilai;
-					}
-					if (satuanField && company.radius_satuan) {
-						satuanField.value = company.radius_satuan;
-					}
-					
-					console.log('Populated company location fields for active shift:', company.latitude, company.longitude);
-					break;
 				}
-			}
-		}
-	})();
-	</script>
+			})();
+		</script>
 	<?php endif; ?>
 </div>
-<span id="setting-presensi" style="display:none"><?=json_encode($setting_presensi)?></span>
-<span id="companies-data" style="display:none"><?=json_encode($companies ?? [])?></span>
-<span id="company-setting-data" style="display:none"><?=json_encode($company_setting ?? [])?></span>
+<span id="setting-presensi" style="display:none"><?= json_encode($setting_presensi) ?></span>
+<span id="companies-data" style="display:none"><?= json_encode($companies ?? []) ?></span>
+<span id="company-setting-data" style="display:none"><?= json_encode($company_setting ?? []) ?></span>
 
 <script>
-// Declare companySetting secara global untuk main-mobile.js
-var companySetting = <?=json_encode($company_setting ?? [])?>;
+	var companySetting = <?= json_encode($company_setting ?? []) ?>;
 </script>
-
 <script>
-// Manual Company Selection Functions (attached to window for global access)
-window.populateManualCompanyOptions = function() {
+window.populateManualCompanyOptions = function () {
 	var select = document.getElementById('manual-company-select');
 	if (!select) {
-		console.error('Manual company select element not found');
+		// If not found, try again after DOM ready, or give a less noisy log.
+		if (document.readyState === "loading") {
+			// Will try again on DOMContentLoaded
+			document.addEventListener('DOMContentLoaded', window.populateManualCompanyOptions, { once: true });
+		} else {
+			console.warn('Manual company select element not found; skipping manual population.');
+		}
 		return;
 	}
-	
+
 	if (typeof assignedCompanies === 'undefined') {
 		console.error('assignedCompanies is undefined');
 		return;
 	}
-	
+
 	if (!Array.isArray(assignedCompanies)) {
 		console.error('assignedCompanies is not an array:', typeof assignedCompanies);
 		return;
 	}
-	
-	if (assignedCompanies.length === 0) {
-		console.warn('No companies assigned to user');
-		return;
+
+	// Only clear and populate if not already populated
+	if (select.options.length === 0) {
+		var defaultOpt = document.createElement('option');
+		defaultOpt.value = '';
+		defaultOpt.textContent = '-- Pilih Perusahaan --';
+		select.appendChild(defaultOpt);
 	}
-	
-	console.log('Populating dropdown with', assignedCompanies.length, 'companies');
-	
-	// Clear existing options except the first one
-	select.innerHTML = '<option value="">-- Pilih Perusahaan --</option>';
-	
-	// Populate with assigned companies
+
 	for (var i = 0; i < assignedCompanies.length; i++) {
 		var company = assignedCompanies[i];
-		
-		// Handle both object and array formats - access properties directly
-		var companyId = null;
-		var companyName = null;
-		
-		// Try to get id_company
+		var companyId = null, companyName = null;
 		if (company.id_company !== undefined && company.id_company !== null) {
 			companyId = company.id_company;
 		}
-		
-		// Try to get nama_company
 		if (company.nama_company !== undefined && company.nama_company !== null) {
 			companyName = company.nama_company;
 		}
-		
-		if (!companyId) {
-			console.warn('Company at index', i, 'has no id_company. Full object:', JSON.stringify(company));
-			continue;
+		if (!companyId) continue;
+		var alreadyAdded = false;
+		for (var j = 0; j < select.options.length; j++) {
+			if (select.options[j].value == companyId) {
+				alreadyAdded = true;
+				break;
+			}
 		}
-		
-		var option = document.createElement('option');
-		option.value = companyId;
-		option.textContent = companyName || 'Perusahaan #' + companyId;
-		select.appendChild(option);
-		console.log('Added company option:', companyId, '-', companyName);
+		if (!alreadyAdded) {
+			var opt = document.createElement('option');
+			opt.value = companyId;
+			opt.textContent = companyName || "Perusahaan #" + companyId;
+			select.appendChild(opt);
+		}
 	}
-	
-	console.log('Dropdown populated with', select.options.length - 1, 'companies');
 };
 
-window.showManualCompanySelector = function() {
+window.showManualCompanySelector = function () {
 	var manualSelect = document.getElementById('manual-company-select');
 	if (manualSelect) {
 		window.populateManualCompanyOptions();
 	}
-	
 	var manualTabTrigger = document.querySelector('[data-bs-target="#manual-detect-tab"]');
 	if (manualTabTrigger && typeof bootstrap !== 'undefined') {
 		var tab = bootstrap.Tab.getOrCreateInstance(manualTabTrigger);
@@ -566,9 +505,7 @@ window.showManualCompanySelector = function() {
 	}
 };
 
-window.selectCompanyManually = function(companyId) {
-	console.log('selectCompanyManually called with companyId:', companyId);
-	
+window.selectCompanyManually = function (companyId) {
 	if (!companyId) {
 		console.error('No company ID provided');
 		if (typeof Swal !== 'undefined') {
@@ -581,7 +518,6 @@ window.selectCompanyManually = function(companyId) {
 		}
 		return;
 	}
-	
 	if (typeof assignedCompanies === 'undefined') {
 		console.error('assignedCompanies is undefined');
 		if (typeof Swal !== 'undefined') {
@@ -594,19 +530,14 @@ window.selectCompanyManually = function(companyId) {
 		}
 		return;
 	}
-	
-	// Find the selected company
 	var selectedCompany = null;
 	for (var i = 0; i < assignedCompanies.length; i++) {
 		var company = assignedCompanies[i];
-		// Handle both object and array formats
-		var companyIdToCompare = company.id_company;
-		if (companyIdToCompare == companyId) {
+		if (company.id_company == companyId) {
 			selectedCompany = company;
 			break;
 		}
 	}
-	
 	if (!selectedCompany) {
 		console.error('Company not found for ID:', companyId);
 		if (typeof Swal !== 'undefined') {
@@ -619,16 +550,16 @@ window.selectCompanyManually = function(companyId) {
 		}
 		return;
 	}
-	
-	console.log('Selected company:', selectedCompany);
-	
-	// Hide not found message
-	document.getElementById('company-not-found').style.display = 'none';
-	
-	// Show company detected with manual badge
-	document.getElementById('company-detected').style.display = 'block';
-	document.getElementById('detected-company-name').innerHTML = selectedCompany.nama_company + ' <span class="badge bg-warning text-dark">Manual</span>';
-	document.getElementById('detected-company-distance').textContent = 'Dipilih secara manual';
+	// Defensive checks before assigning (fixes "Cannot set properties of null"!)
+	var eNotFound, eDetected, eName, eDistance;
+	eNotFound = document.getElementById('company-not-found');
+	if (eNotFound) eNotFound.style.display = 'none';
+	eDetected = document.getElementById('company-detected');
+	if (eDetected) eDetected.style.display = 'block';
+	eName = document.getElementById('detected-company-name');
+	if (eName) eName.innerHTML = selectedCompany.nama_company + ' <span class="badge bg-warning text-dark">Manual</span>';
+	eDistance = document.getElementById('detected-company-distance');
+	if (eDistance) eDistance.textContent = 'Dipilih secara manual';
 	var settingBadge = document.getElementById('detected-company-setting');
 	if (settingBadge) {
 		if (selectedCompany.nama_setting) {
@@ -638,68 +569,37 @@ window.selectCompanyManually = function(companyId) {
 			settingBadge.style.display = 'none';
 		}
 	}
-	
-	// Set hidden field
-	document.getElementById('id_company').value = selectedCompany.id_company;
-	
-	// Presensi-specific: Set additional hidden fields
+	var el = document.getElementById('id_company');
+	if (el) el.value = selectedCompany.id_company;
 	var selectedCompanyIdField = document.getElementById('selected-company-id');
-	if (selectedCompanyIdField) {
-		selectedCompanyIdField.value = selectedCompany.id_company;
-	}
-	
+	if (selectedCompanyIdField) selectedCompanyIdField.value = selectedCompany.id_company;
 	var latField = document.getElementById('selected-company-lat');
-	if (latField) {
-		latField.value = selectedCompany.latitude || '';
-	}
-	
+	if (latField) latField.value = selectedCompany.latitude || '';
 	var lngField = document.getElementById('selected-company-lng');
-	if (lngField) {
-		lngField.value = selectedCompany.longitude || '';
-	}
-	
+	if (lngField) lngField.value = selectedCompany.longitude || '';
 	var radiusField = document.getElementById('selected-company-radius');
-	if (radiusField) {
-		radiusField.value = selectedCompany.radius_nilai || '';
-	}
-	
+	if (radiusField) radiusField.value = selectedCompany.radius_nilai || '';
 	var satuanField = document.getElementById('selected-company-satuan');
-	if (satuanField) {
-		satuanField.value = selectedCompany.radius_satuan || '';
-	}
-	
-	// Presensi-specific: Enable presensi buttons
+	if (satuanField) satuanField.value = selectedCompany.radius_satuan || '';
 	var presensiButtons = document.querySelectorAll('.presensi-container');
-	presensiButtons.forEach(function(btn) {
+	presensiButtons.forEach(function (btn) {
 		btn.style.opacity = '1';
 		btn.style.pointerEvents = 'auto';
 	});
-	
-	// Attempt to get GPS location when company is manually selected
-	// This helps with presensi submission even if GPS wasn't available initially
+	// Defensive: Set GPS only if fields are present
 	if (navigator.geolocation) {
 		navigator.geolocation.getCurrentPosition(
-			function(position) {
-				// GPS succeeded - set detected coordinates
-				var userLat = position.coords.latitude;
-				var userLon = position.coords.longitude;
-				
+			function (position) {
 				var detectedLatField = document.getElementById('detected-latitude');
 				var detectedLngField = document.getElementById('detected-longitude');
-				
 				if (detectedLatField) {
-					detectedLatField.value = userLat;
+					detectedLatField.value = position.coords.latitude;
 				}
 				if (detectedLngField) {
-					detectedLngField.value = userLon;
+					detectedLngField.value = position.coords.longitude;
 				}
-				
-				console.log('GPS location obtained for manual selection:', userLat, userLon);
 			},
-			function(error) {
-				// GPS failed - this is OK, we'll use company location as fallback
-				console.log('GPS not available for manual selection, will use company location as fallback');
-				// Don't block the selection - allow it to proceed
+			function (error) {
 			},
 			{
 				enableHighAccuracy: true,
@@ -707,20 +607,12 @@ window.selectCompanyManually = function(companyId) {
 				maximumAge: 0
 			}
 		);
-	} else {
-		console.log('Geolocation not supported, will use company location as fallback');
 	}
-	
-	// Switch to auto-detect tab to show the result
 	var autoTabTrigger = document.querySelector('[data-bs-target="#auto-detect-tab"]');
 	if (autoTabTrigger && typeof bootstrap !== 'undefined') {
 		var tab = bootstrap.Tab.getOrCreateInstance(autoTabTrigger);
 		tab.show();
 	}
-	
-	console.log('Company selection completed successfully');
-	
-	// Show success message
 	if (typeof Swal !== 'undefined') {
 		Swal.fire({
 			icon: 'success',
@@ -734,131 +626,120 @@ window.selectCompanyManually = function(companyId) {
 };
 
 // Deteksi otomatis perusahaan berbasis GPS (anti-kecurangan)
-(function() {
-	// Fungsi untuk menghitung jarak antar dua koordinat
+(function () {
 	function getDistance(lat1, lon1, lat2, lon2) {
-		const R = 6371; // Radius bumi dalam kilometer
+		const R = 6371;
 		const dLat = (lat2 - lat1) * Math.PI / 180;
 		const dLon = (lon2 - lon1) * Math.PI / 180;
-		const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-				  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-				  Math.sin(dLon/2) * Math.sin(dLon/2);
-		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-		const distance = R * c;
-		return distance; // dalam kilometer
+		const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+			Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+			Math.sin(dLon / 2) * Math.sin(dLon / 2);
+		const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+		return R * c;
 	}
-	
-	// Cek apakah radius lokasi diaktifkan
 	var gunakanRadiusLokasi = companySetting && companySetting.gunakan_radius_lokasi ? companySetting.gunakan_radius_lokasi : 'Y';
-	
-	// Deteksi otomatis perusahaan berdasarkan GPS
 	if (navigator.geolocation && typeof assignedCompanies !== 'undefined') {
-		navigator.geolocation.getCurrentPosition(function(position) {
+		navigator.geolocation.getCurrentPosition(function (position) {
 			var userLat = position.coords.latitude;
 			var userLon = position.coords.longitude;
-			
-			// Simpan lokasi pengguna
-			document.getElementById('detected-latitude').value = userLat;
-			document.getElementById('detected-longitude').value = userLon;
-			
-			// Temukan perusahaan terdekat dalam radius
+			// Defensive check, only set if fields exist!
+			var eLat = document.getElementById('detected-latitude');
+			var eLng = document.getElementById('detected-longitude');
+			if (eLat) eLat.value = userLat;
+			if (eLng) eLng.value = userLon;
+
 			var nearestCompany = null;
 			var minDistance = Infinity;
-			
 			for (var i = 0; i < assignedCompanies.length; i++) {
 				var company = assignedCompanies[i];
 				var companyLat = parseFloat(company.latitude);
 				var companyLon = parseFloat(company.longitude);
 				var radiusNilai = parseFloat(company.radius_nilai);
 				var radiusSatuan = company.radius_satuan;
-				
-				// Gunakan pengaturan radius khusus perusahaan jika tersedia
 				if (company.setting_data) {
 					radiusNilai = parseFloat(company.setting_data.radius_nilai || company.radius_nilai);
 					radiusSatuan = company.setting_data.radius_satuan || company.radius_satuan;
 				}
-				
-				// Konversi radius ke kilometer
 				var radiusKm = radiusSatuan === 'm' ? radiusNilai / 1000 : radiusNilai;
-				
-				// Hitung jarak
 				var distance = getDistance(userLat, userLon, companyLat, companyLon);
-				
-				// Cek dalam radius (hanya jika pemeriksaan radius diaktifkan)
 				if (gunakanRadiusLokasi === 'N') {
-					// Pemeriksaan radius dimatikan - cari perusahaan terdekat saja
 					if (distance < minDistance) {
 						minDistance = distance;
 						nearestCompany = company;
 					}
 				} else {
-					// Pemeriksaan radius diaktifkan - harus dalam radius
 					if (distance <= radiusKm && distance < minDistance) {
 						minDistance = distance;
 						nearestCompany = company;
 					}
 				}
 			}
-			
-			// Sembunyikan spinner mendeteksi
-			document.getElementById('company-detecting').style.display = 'none';
-			
+			var eDetecting = document.getElementById('company-detecting');
+			if (eDetecting) eDetecting.style.display = 'none';
+
 			if (nearestCompany) {
-				// Perusahaan terdeteksi!
-				document.getElementById('company-detected').style.display = 'block';
-				document.getElementById('detected-company-name').textContent = nearestCompany.nama_company;
-				
-				// Display nama_setting if available
+				// Defensive value checks everywhere:
+				var eDetected = document.getElementById('company-detected');
+				if (eDetected) eDetected.style.display = 'block';
+				var eName = document.getElementById('detected-company-name');
+				if (eName) eName.textContent = nearestCompany.nama_company;
 				var settingBadge = document.getElementById('detected-company-setting');
-				if (nearestCompany.nama_setting) {
-					settingBadge.textContent = nearestCompany.nama_setting;
-					settingBadge.style.display = 'inline-block';
-				} else {
-					settingBadge.style.display = 'none';
+				if (settingBadge) {
+					if (nearestCompany.nama_setting) {
+						settingBadge.textContent = nearestCompany.nama_setting;
+						settingBadge.style.display = 'inline-block';
+					} else {
+						settingBadge.style.display = 'none';
+					}
 				}
-				
-				var distanceText = minDistance < 1 
+				var distanceText = minDistance < 1
 					? Math.round(minDistance * 1000) + ' meter dari lokasi perusahaan'
 					: minDistance.toFixed(2) + ' km dari lokasi perusahaan';
-				
-				if (gunakanRadiusLokasi === 'N') {
-					document.getElementById('detected-company-distance').textContent = 'Anda berada ' + distanceText + ' (Validasi radius dinonaktifkan)';
-				} else {
-					document.getElementById('detected-company-distance').textContent = 'Anda berada ' + distanceText;
+				var eDist = document.getElementById('detected-company-distance');
+				if (eDist) {
+					if (gunakanRadiusLokasi === 'N') {
+						eDist.textContent = 'Anda berada ' + distanceText + ' (Validasi radius dinonaktifkan)';
+					} else {
+						eDist.textContent = 'Anda berada ' + distanceText;
+					}
 				}
-				
-				// Set field tersembunyi
-				document.getElementById('id_company').value = nearestCompany.id_company;
-				document.getElementById('selected-company-id').value = nearestCompany.id_company;
-				document.getElementById('selected-company-lat').value = nearestCompany.latitude;
-				document.getElementById('selected-company-lng').value = nearestCompany.longitude;
-				document.getElementById('selected-company-radius').value = nearestCompany.radius_nilai;
-				document.getElementById('selected-company-satuan').value = nearestCompany.radius_satuan;
+				var eid = document.getElementById('id_company');
+				var eid2 = document.getElementById('selected-company-id');
+				var elat = document.getElementById('selected-company-lat');
+				var elng = document.getElementById('selected-company-lng');
+				var erad = document.getElementById('selected-company-radius');
+				var esatuan = document.getElementById('selected-company-satuan');
+				if (eid) eid.value = nearestCompany.id_company;
+				if (eid2) eid2.value = nearestCompany.id_company;
+				if (elat) elat.value = nearestCompany.latitude;
+				if (elng) elng.value = nearestCompany.longitude;
+				if (erad) erad.value = nearestCompany.radius_nilai;
+				if (esatuan) esatuan.value = nearestCompany.radius_satuan;
 			} else {
-				// Tidak ada perusahaan ditemukan dalam radius
-				document.getElementById('company-not-found').style.display = 'block';
-				
-				// Show manual selector option
+				var eNotFound = document.getElementById('company-not-found');
+				if (eNotFound) eNotFound.style.display = 'block';
 				if (window.showManualCompanySelector) {
 					window.showManualCompanySelector();
 				}
-				
-				// Nonaktifkan tombol presensi
 				var presensiButtons = document.querySelectorAll('.presensi-container');
-				presensiButtons.forEach(function(btn) {
+				presensiButtons.forEach(function (btn) {
 					btn.style.opacity = '0.5';
 					btn.style.pointerEvents = 'none';
 				});
 			}
-		}, function(error) {
-			// Error GPS
-			document.getElementById('company-detecting').style.display = 'none';
-			document.getElementById('company-not-found').style.display = 'block';
-			document.getElementById('company-not-found').querySelector('.alert').innerHTML = 
-				'<i class="fas fa-exclamation-triangle me-2"></i>' +
-				'<strong>Gagal mendapatkan lokasi GPS!</strong><br>' +
-				'<small>Pastikan GPS/Lokasi diaktifkan di browser Anda atau pilih perusahaan secara manual.</small>';
-			// Show manual selector option
+		}, function (error) {
+			var eDetecting = document.getElementById('company-detecting');
+			var eNotFound = document.getElementById('company-not-found');
+			if (eDetecting) eDetecting.style.display = 'none';
+			if (eNotFound) {
+				eNotFound.style.display = 'block';
+				var eAlert = eNotFound.querySelector('.alert');
+				if (eAlert) {
+					eAlert.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>' +
+						'<strong>Gagal mendapatkan lokasi GPS!</strong><br>' +
+						'<small>Pastikan GPS/Lokasi diaktifkan di browser Anda atau pilih perusahaan secara manual.</small>';
+				}
+			}
 			if (window.showManualCompanySelector) {
 				window.showManualCompanySelector();
 			}
@@ -876,96 +757,50 @@ window.selectCompanyManually = function(companyId) {
 		setTimeout(checkJQuery, 50);
 		return;
 	}
+	jQuery(document).ready(function () {
+		// On page load, forcibly re-populate manual-company-select (robust)
+		window.populateManualCompanyOptions();
 
-	// jQuery is loaded, now run our code
-	
-	// Manual Company Selection Event Handlers
-	jQuery(document).ready(function() {
-		// Populate manual company options on page load
-		if (window.populateManualCompanyOptions) {
-			window.populateManualCompanyOptions();
-		}
-		
-		// Tab change event listener - populate dropdown when manual tab is shown
+		// Tab change event listener
 		jQuery('#company-detection-tabs button[data-bs-toggle="pill"]').on('shown.bs.tab', function (e) {
 			var targetTab = jQuery(e.target).data('bs-target');
-			console.log('Tab shown:', targetTab);
 			if (targetTab === '#manual-detect-tab') {
-				// Manual tab is now active, hide loading spinner and populate the dropdown
 				jQuery('#company-detecting').hide();
-				console.log('Manual tab shown, populating dropdown...');
-				if (window.populateManualCompanyOptions) {
-					window.populateManualCompanyOptions();
-				} else {
-					console.error('populateManualCompanyOptions function not found');
-				}
+				window.populateManualCompanyOptions();
 			}
 		});
-		
-		// Also handle direct click on manual tab button (fallback)
-		jQuery('button[data-bs-target="#manual-detect-tab"]').on('click', function() {
-			console.log('Manual tab button clicked');
-			// Hide loading spinner immediately when user clicks manual tab
+		jQuery('button[data-bs-target="#manual-detect-tab"]').on('click', function () {
 			jQuery('#company-detecting').hide();
-			// Small delay to ensure tab is shown before populating
-			setTimeout(function() {
-				console.log('Populating dropdown after tab click...');
-				if (window.populateManualCompanyOptions) {
-					window.populateManualCompanyOptions();
-				} else {
-					console.error('populateManualCompanyOptions function not found');
-				}
+			setTimeout(function () {
+				window.populateManualCompanyOptions();
 			}, 100);
 		});
-		
-		// Ensure tabs are always clickable - prevent any overlay from blocking
 		jQuery('#company-detection-tabs button').css({
 			'pointer-events': 'auto',
 			'z-index': '1000',
 			'position': 'relative'
 		});
-		
-		// Also populate on page load if manual tab is already visible (for debugging)
-		setTimeout(function() {
+		setTimeout(function () {
 			var manualTab = jQuery('#manual-detect-tab');
 			if (manualTab.hasClass('active') || manualTab.hasClass('show')) {
-				console.log('Manual tab is active on page load, populating...');
-				if (window.populateManualCompanyOptions) {
-					window.populateManualCompanyOptions();
-				}
+				window.populateManualCompanyOptions();
 			}
 		}, 500);
-		
-		// Manual company selection dropdown change handler
+		// Dropdown change enables the button
 		jQuery('#manual-company-select').on('change', function () {
 			var selectedValue = jQuery(this).val();
 			var confirmBtn = jQuery('#btn-confirm-manual-company');
-			console.log('Dropdown changed, selected value:', selectedValue);
-			if (selectedValue && selectedValue !== '') {
-				confirmBtn.prop('disabled', false);
-				console.log('Button enabled');
-			} else {
-				confirmBtn.prop('disabled', true);
-				console.log('Button disabled');
-			}
+			confirmBtn.prop('disabled', !selectedValue);
 		});
-		
-		// Fallback: If dropdown has no options but companies exist, try to populate on focus
-		jQuery('#manual-company-select').on('focus', function() {
+		jQuery('#manual-company-select').on('focus', function () {
 			var select = jQuery(this);
-			if (select.find('option').length <= 1 && typeof window.populateManualCompanyOptions === 'function') {
-				console.log('Dropdown focused but empty, attempting to populate...');
+			if (select.find('option').length <= 1) {
 				window.populateManualCompanyOptions();
 			}
 		});
-		
-		// Manual company confirmation button click handler
 		jQuery('#btn-confirm-manual-company').on('click', function () {
 			var selectedCompanyId = jQuery('#manual-company-select').val();
-			console.log('Button clicked, selected company ID:', selectedCompanyId);
-			
 			if (!selectedCompanyId || selectedCompanyId === '') {
-				// Show error message if no company selected
 				if (typeof Swal !== 'undefined') {
 					Swal.fire({
 						icon: 'warning',
@@ -978,55 +813,39 @@ window.selectCompanyManually = function(companyId) {
 				}
 				return;
 			}
-			
-			if (window.selectCompanyManually) {
-				window.selectCompanyManually(selectedCompanyId);
-			} else {
-				console.error('selectCompanyManually function not found');
+			window.selectCompanyManually(selectedCompanyId);
+		});
+	});
+	jQuery(document).ready(function () {
+		jQuery('.presensi-container').on('click', function (e) {
+			var today = new Date().getDay();
+			var hariKerja = companySetting && companySetting.hari_kerja ? companySetting.hari_kerja : [1, 2, 3, 4, 5];
+			var isWorkingDay = hariKerja.some(function (day) {
+				return parseInt(day) === parseInt(today);
+			});
+			if (!isWorkingDay) {
+				e.preventDefault();
 				if (typeof Swal !== 'undefined') {
 					Swal.fire({
-						icon: 'error',
-						title: 'Error',
-						text: 'Fungsi pemilihan perusahaan tidak tersedia. Silakan refresh halaman.',
+						icon: 'info',
+						title: 'Hari Libur',
+						text: 'Anda tidak bisa absen di hari libur. Presensi hanya dapat dilakukan pada hari kerja.',
 						confirmButtonText: 'OK'
 					});
 				}
-			}
-		});
-	});
-	
-	// Nonaktifkan tombol presensi jika tidak ada perusahaan terdeteksi atau bukan hari kerja
-	jQuery(document).ready(function() {
-		jQuery('.presensi-container').on('click', function(e) {
-			// Periksa apakah hari ini hari kerja
-			var today = new Date().getDay(); // 0 = Minggu, 1 = Senin, dst.
-			var hariKerja = companySetting && companySetting.hari_kerja ? companySetting.hari_kerja : [1,2,3,4,5];
-			
-			// Pastikan perbandingan integer (handle string dan int)
-			var isWorkingDay = hariKerja.some(function(day) {
-				return parseInt(day) === parseInt(today);
-			});
-			
-			if (!isWorkingDay) {
-				e.preventDefault();
-				Swal.fire({
-					icon: 'info',
-					title: 'Hari Libur',
-					text: 'Anda tidak bisa absen di hari libur. Presensi hanya dapat dilakukan pada hari kerja.',
-					confirmButtonText: 'OK'
-				});
 				return false;
 			}
-			
 			var companyId = jQuery('#id_company').val();
 			if (!companyId) {
 				e.preventDefault();
-				Swal.fire({
-					icon: 'error',
-					title: 'Tidak Dapat Absen!',
-					text: 'Anda tidak berada di lokasi perusahaan yang ditugaskan.',
-					confirmButtonText: 'OK'
-				});
+				if (typeof Swal !== 'undefined') {
+					Swal.fire({
+						icon: 'error',
+						title: 'Tidak Dapat Absen!',
+						text: 'Anda tidak berada di lokasi perusahaan yang ditugaskan.',
+						confirmButtonText: 'OK'
+					});
+				}
 				return false;
 			}
 		});
