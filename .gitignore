@@ -79,3 +79,5 @@ public/images/presensi/*
 # Ignore compressed archives
 # *.zip
 *.rar
+
+cpanel_user.txt
