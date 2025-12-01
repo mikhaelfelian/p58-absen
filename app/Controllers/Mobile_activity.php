@@ -341,8 +341,10 @@ class Mobile_activity extends BaseController
 			return null;
 		}
 		
-		// Extract PATROL_ pattern using regex
-		if (preg_match('/PATROL_[0-9A-Z_]+/i', $cleaned, $matches)) {
+		// Extract PATROL_ pattern using regex - format: PATROL_XXX_XXX_YYYYMMDDHHMMSS
+		// More accurate pattern: PATROL_ + 3 digits (company) + _ + 3 digits (sequence) + _ + 14 digits (timestamp)
+		// Timestamp format: YYYYMMDDHHMMSS (14 digits)
+		if (preg_match('/PATROL_\d{3}_\d{3}_\d{14}/i', $cleaned, $matches)) {
 			return $matches[0];
 		}
 		
