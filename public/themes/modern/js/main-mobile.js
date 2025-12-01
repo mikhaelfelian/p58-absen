@@ -2121,7 +2121,8 @@ function initPatrolFunctionality() {
 	});
 	
 	// Step navigation
-	$('#btn-proceed-to-step2').click(function() {
+	// Proceed to step 2 handlers (both QR and OCR)
+	$('#btn-proceed-to-step2, #btn-proceed-to-step2-ocr').click(function() {
 		showStep(2);
 	});
 	
@@ -3878,17 +3879,10 @@ function initPatrolFunctionality() {
 				const ocrText = result.data.text || '';
 				console.log('[OCR FALLBACK] OCR result:', ocrText);
 				
-				// Extract PATROL_ pattern using regex
-				const patrolPattern = /PATROL_[0-9A-Z_]+/i;
-				const match = ocrText.match(patrolPattern);
-				
-				const ocrText = result.data.text || '';
-				console.log('[OCR FALLBACK] OCR result:', ocrText);
-				
-				// Display all detected OCR text in the OCR result section
+				// Display all detected OCR text in the OCR result section (lines 421-431)
 				if (ocrText.trim()) {
 					$('#ocr-detected-text').text(ocrText);
-					$('#qr-scan-result').show();
+					$('#ocr-scan-result').show();
 					
 					// Update status
 					$('#qr-scanning-status').html(`
@@ -4151,11 +4145,22 @@ function initPatrolFunctionality() {
 		$('#qr-code-text').text(barcode);
 		$('#qr-result').show();
 		
-		$('#scanned-patrol-info').html(`
-			<strong>${matchedPatrol.nama_patrol}</strong><br>
-			<small>${scannedPatrolData.nama_company || (window.nearestCompany ? window.nearestCompany.nama_company : '')}</small>
-		`);
-		$('#qr-scan-result').show();
+		// Display in appropriate section based on detection method
+		if (options.source === 'ocr') {
+			// OCR detection - show in OCR section (lines 421-431)
+			$('#ocr-patrol-info').html(`
+				<strong>${matchedPatrol.nama_patrol}</strong><br>
+				<small>${scannedPatrolData.nama_company || (window.nearestCompany ? window.nearestCompany.nama_company : '')}</small>
+			`);
+			$('#ocr-scan-result').show();
+		} else {
+			// QR detection - show in QR section (lines 432-446)
+			$('#scanned-patrol-info').html(`
+				<strong>${matchedPatrol.nama_patrol}</strong><br>
+				<small>${scannedPatrolData.nama_company || (window.nearestCompany ? window.nearestCompany.nama_company : '')}</small>
+			`);
+			$('#qr-scan-result').show();
+		}
 		
 		// Auto-fill judul_activity with patrol name if field is empty
 		const judulField = $('#judul_activity');

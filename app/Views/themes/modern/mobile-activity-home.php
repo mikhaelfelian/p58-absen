@@ -410,18 +410,19 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 				</div>
 				<div id="ocr-status" class="mt-3 small text-muted"></div>
 			</div>
-			<div id="qr-scan-result" class="mt-3" style="display:none;">
+			<!-- OCR Result Section (lines 421-431) -->
+			<div id="ocr-scan-result" class="mt-3" style="display:none;">
 				<div class="alert alert-info">
 					<i class="fas fa-eye me-2"></i>
 					<strong>OCR Text Detected</strong>
 					<div id="ocr-detected-text" class="mt-2 p-2 bg-light rounded" style="font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow-y: auto;"></div>
-					<div id="scanned-patrol-info" class="mt-2"></div>
-					<button type="button" class="btn btn-success btn-sm mt-2" id="btn-proceed-to-step2">
+					<div id="ocr-patrol-info" class="mt-2"></div>
+					<button type="button" class="btn btn-success btn-sm mt-2" id="btn-proceed-to-step2-ocr">
 						<i class="fas fa-arrow-right me-1"></i>Lanjut ke Step 2
 					</button>
 				</div>
 			</div>
-			<!-- QR Scan Result Section -->
+			<!-- QR Scan Result Section (lines 432-446) -->
 			<div id="qr-scan-result" class="mt-3" style="display:none;">
 				<div class="alert alert-success">
 					<i class="fas fa-check-circle me-2"></i>
