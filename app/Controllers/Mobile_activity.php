@@ -327,7 +327,31 @@ class Mobile_activity extends BaseController
 	}
 	
 	/**
+	 * Normalize patrol code from QR or OCR input
+	 * Extracts and validates PATROL_ pattern
+	 * 
+	 * @param string $input Raw input from QR scanner or OCR
+	 * @return string|null Normalized patrol code or null if invalid
+	 */
+	private function normalizePatrolCode(string $input): ?string {
+		// Trim whitespace
+		$cleaned = trim($input);
+		
+		if (empty($cleaned)) {
+			return null;
+		}
+		
+		// Extract PATROL_ pattern using regex
+		if (preg_match('/PATROL_[0-9A-Z_]+/i', $cleaned, $matches)) {
+			return $matches[0];
+		}
+		
+		return null;
+	}
+	
+	/**
 	 * Validate QR code (sequence checking removed - allow jumping between patrols)
+	 * Now supports both QR and OCR input
 	 */
 	public function validateQRCode() {
 		$barcode = $this->request->getPost('barcode');
@@ -341,10 +365,21 @@ class Mobile_activity extends BaseController
 			return;
 		}
 		
+		// Normalize input (handles both QR and OCR)
+		$normalized_barcode = $this->normalizePatrolCode($barcode);
+		
+		if (!$normalized_barcode) {
+			echo json_encode([
+				'status' => 'error',
+				'message' => 'QR Code tidak valid atau tidak ditemukan untuk company ini'
+			]);
+			return;
+		}
+		
 		$patrolModel = new CompanyPatrolModel;
 		
 		// Validate barcode exists and belongs to company
-		$patrol = $patrolModel->validateBarcode($barcode, $id_company);
+		$patrol = $patrolModel->validateBarcode($normalized_barcode, $id_company);
 		
 		if (!$patrol) {
 			echo json_encode([

@@ -5,6 +5,9 @@
 <meta name="descrition" content="Presensi"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="mobile-web-app-capable" content="yes" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 	<link rel="manifest" href="<?=$config->baseURL?>manifest.json.php"/>
 <link rel="shortcut icon" href="<?=$config->baseURL . 'public/images/favicon.png?r='.time()?>" />
 
@@ -246,7 +249,12 @@ if (@$styles) {
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/moment/moment.min.js?r='.time()?>"></script>
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/flatpickr/dist/l10n/id.js?r='.time()?>"></script>
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/filesaver/FileSaver.js?r='.time()?>"></script>
-<script type="text/javascript" src="<?=$config->baseURL . 'public/themes/modern/js/main-mobile.js?r='.time()?>"></script>
+<?php
+// Enhanced cache-busting: use file modification time for more reliable cache invalidation
+$main_mobile_js_path = ROOTPATH . 'public/themes/modern/js/main-mobile.js';
+$main_mobile_js_version = file_exists($main_mobile_js_path) ? filemtime($main_mobile_js_path) : time();
+?>
+<script type="text/javascript" src="<?=$config->baseURL . 'public/themes/modern/js/main-mobile.js?v='.$main_mobile_js_version?>"></script>
 
 <!-- Data Tables -->
 <script type="text/javascript" src="<?=$config->baseURL . 'public/vendors/datatables/dist/js/jquery.dataTables.min.js?r='.time()?>"></script>

@@ -332,6 +332,7 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 				</div>
 			</div>
 
+			<!-- QR Scanner - Primary method, falls back to OCR if no QR detected -->
 			<div class="inline-qr-shell mb-3" id="qr-inline-wrapper" data-wrapper-home="true">
 				<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-3 gap-2">
 					<div>
@@ -349,7 +350,6 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 				</div>
 				<div id="qr-reader"></div>
 				<div id="qr-scanning-status" class="mt-3 small text-muted"></div>
-				<!-- Flash Control for QR Scanner -->
 				<div id="qr-flash-control-wrapper" class="mt-3 mb-2" style="display:none;">
 					<div class="d-flex align-items-center gap-2">
 						<small class="text-muted me-2">Flash:</small>
@@ -395,7 +395,33 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 				</div>
 				<div class="text-muted small mt-2">Gunakan "Validasi Manual" jika QR sulit terbaca, atau "Masukkan QR Code Manual" untuk memasukkan barcode secara manual.</div>
 			</div>
-
+			
+			<!-- OCR Fallback - Automatically triggered if QR not detected -->
+			<!-- OCR wrapper kept for fallback functionality, but hidden by default -->
+			<div class="inline-qr-shell mb-3" id="ocr-wrapper" style="display:none;">
+				<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-3 gap-2">
+					<div>
+						<h6 class="mb-1 fw-semibold">OCR Text Detection (Fallback)</h6>
+						<small class="text-muted">Membaca teks dari kamera menggunakan OCR</small>
+					</div>
+				</div>
+				<div id="ocr-video-container" style="width: 100%; min-height: 280px; background: #000; border-radius: 8px; position: relative; display: none;">
+					<video id="ocr-video" autoplay playsinline style="width: 100%; height: 100%; object-fit: contain;"></video>
+				</div>
+				<div id="ocr-status" class="mt-3 small text-muted"></div>
+			</div>
+			<div id="qr-scan-result" class="mt-3" style="display:none;">
+				<div class="alert alert-info">
+					<i class="fas fa-eye me-2"></i>
+					<strong>OCR Text Detected</strong>
+					<div id="ocr-detected-text" class="mt-2 p-2 bg-light rounded" style="font-family: monospace; white-space: pre-wrap; max-height: 200px; overflow-y: auto;"></div>
+					<div id="scanned-patrol-info" class="mt-2"></div>
+					<button type="button" class="btn btn-success btn-sm mt-2" id="btn-proceed-to-step2">
+						<i class="fas fa-arrow-right me-1"></i>Lanjut ke Step 2
+					</button>
+				</div>
+			</div>
+			<!-- QR Scan Result Section -->
 			<div id="qr-scan-result" class="mt-3" style="display:none;">
 				<div class="alert alert-success">
 					<i class="fas fa-check-circle me-2"></i>
@@ -940,4 +966,26 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 		</div>
 	</div>
 </div>
+<!-- Tesseract.js for OCR fallback -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js?v=<?=time()?>"></script>
+<script>
+	// Verify Tesseract.js loaded
+	window.addEventListener('load', function() {
+		setTimeout(function() {
+			if (typeof Tesseract === 'undefined') {
+				console.error('[MOBILE DEBUG] Tesseract.js failed to load from CDN');
+				// Try fallback CDN
+				const script = document.createElement('script');
+				script.src = 'https://unpkg.com/tesseract.js@5/dist/tesseract.min.js?v=' + Date.now();
+				script.onerror = function() {
+					console.error('[MOBILE DEBUG] Tesseract.js fallback CDN also failed');
+				};
+				document.head.appendChild(script);
+			} else {
+				console.log('[MOBILE DEBUG] Tesseract.js loaded successfully');
+			}
+		}, 1000);
+	});
+</script>
+
 <?= $this->endSection() ?>

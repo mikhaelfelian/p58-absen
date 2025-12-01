@@ -1055,7 +1055,7 @@ $(document).ready(function() {
 					hidePresensiFlashControl();
 					// Update waktu presensi if btn_clicked is set
 					if (btn_clicked && btn_clicked !== '') {
-						$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
+					$(`#${btn_clicked}`).find('.waktu-presensi').text(data.data.waktu);
 					}
 					toast_mobile('<i class="bi bi-check-circle me-2"></i>Data berhasil disimpan');
 
@@ -1296,6 +1296,9 @@ $(document).ready(function() {
 
 // Patrol functionality
 function initPatrolFunctionality() {
+	// Detect if running on mobile device
+	const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+	
 	let qrScanner = null;
 	let currentCompanyId = null;
 	let companyPatrolMap = (typeof assignedPatrols !== 'undefined' && assignedPatrols) ? assignedPatrols : {};
@@ -1340,6 +1343,129 @@ function initPatrolFunctionality() {
 	
 	// QR Scanner timing metrics
 	let qrScannerStartTime = null;
+	let ocrFallbackTimer = null; // Timer for OCR fallback after 1 second
+	let tesseractWorker = null; // Tesseract.js worker instance
+	
+	// Mobile debugging
+	let mobileDebugEnabled = false;
+	let mobileDebugLogs = [];
+	const maxDebugLogs = 50;
+	
+	// Verify Tesseract.js is loaded
+	function verifyTesseractLoaded() {
+		if (typeof Tesseract === 'undefined') {
+			console.error('[MOBILE DEBUG] Tesseract.js not loaded!');
+			mobileDebugLog('ERROR: Tesseract.js library not found. OCR fallback will not work.');
+			return false;
+		}
+		console.log('[MOBILE DEBUG] Tesseract.js loaded successfully');
+		mobileDebugLog('Tesseract.js library loaded');
+		return true;
+	}
+	
+	// Mobile debug logging function
+	function mobileDebugLog(message, type = 'info') {
+		const timestamp = new Date().toLocaleTimeString();
+		const logEntry = {
+			timestamp: timestamp,
+			message: message,
+			type: type
+		};
+		mobileDebugLogs.push(logEntry);
+		if (mobileDebugLogs.length > maxDebugLogs) {
+			mobileDebugLogs.shift(); // Remove oldest log
+		}
+		
+		// Update debug panel if visible
+		if (mobileDebugEnabled) {
+			updateMobileDebugPanel();
+		}
+		
+		// Always log to console
+		const prefix = type === 'error' ? '[MOBILE DEBUG ERROR]' : type === 'warning' ? '[MOBILE DEBUG WARN]' : '[MOBILE DEBUG]';
+		console.log(prefix, message);
+	}
+	
+	// Update mobile debug panel
+	function updateMobileDebugPanel() {
+		const panel = $('#mobile-debug-panel');
+		if (!panel.length) return;
+		
+		const logsHtml = mobileDebugLogs.slice(-20).reverse().map(log => {
+			const icon = log.type === 'error' ? 'fa-exclamation-circle text-danger' : 
+			            log.type === 'warning' ? 'fa-exclamation-triangle text-warning' : 
+			            'fa-info-circle text-info';
+			return `<div class="small mb-1">
+				<i class="fas ${icon} me-1"></i>
+				<span class="text-muted">[${log.timestamp}]</span> ${log.message}
+			</div>`;
+		}).join('');
+		
+		panel.find('.debug-logs').html(logsHtml || '<div class="text-muted small">No logs yet...</div>');
+	}
+	
+	// Toggle mobile debug panel
+	function toggleMobileDebug() {
+		mobileDebugEnabled = !mobileDebugEnabled;
+		const panel = $('#mobile-debug-panel');
+		if (mobileDebugEnabled) {
+			if (!panel.length) {
+				// Create debug panel
+				const debugPanel = $(`
+					<div id="mobile-debug-panel" class="position-fixed bottom-0 start-0 end-0 bg-dark text-white p-3" style="max-height: 200px; overflow-y: auto; z-index: 9999; display: none; border-top: 2px solid #0d6efd;">
+						<div class="d-flex justify-content-between align-items-center mb-2">
+							<strong><i class="fas fa-bug me-2"></i>Mobile Debug Panel</strong>
+							<div>
+								<button class="btn btn-sm btn-outline-light me-2" onclick="location.reload(true)">
+									<i class="fas fa-sync me-1"></i>Force Reload
+								</button>
+								<button class="btn btn-sm btn-outline-light" onclick="$('#mobile-debug-panel').hide(); mobileDebugEnabled = false;">
+									<i class="fas fa-times"></i>
+								</button>
+							</div>
+						</div>
+						<div class="debug-logs small"></div>
+					</div>
+				`);
+				$('body').append(debugPanel);
+			}
+			updateMobileDebugPanel();
+			$('#mobile-debug-panel').slideDown();
+		} else {
+			if (panel.length) {
+				panel.slideUp();
+			}
+		}
+	}
+	
+	// Add debug toggle button (only on mobile)
+	if (isMobile) {
+		// Make toggle function globally accessible for button click
+		window.toggleMobileDebug = toggleMobileDebug;
+		
+		// Add triple-tap gesture to show debug panel (tap on qr-scanning-status area)
+		let tapCount = 0;
+		let tapTimer = null;
+		$(document).on('click', '#qr-scanning-status, #qr-reader', function(e) {
+			// Only trigger on quick triple-tap (within 1 second)
+			tapCount++;
+			if (tapTimer) clearTimeout(tapTimer);
+			tapTimer = setTimeout(() => {
+				if (tapCount >= 3) {
+					toggleMobileDebug();
+					mobileDebugLog('Debug panel toggled by triple-tap');
+				}
+				tapCount = 0;
+			}, 1000);
+		});
+		
+		mobileDebugLog('Mobile debug system initialized. Triple-tap QR area to show debug panel.');
+	}
+	
+	// Verify Tesseract on init
+	setTimeout(() => {
+		verifyTesseractLoaded();
+	}, 1000);
 	let defaultQrStatusHtml = `
 		<div class="alert alert-info mb-0">
 			<i class="fas fa-search me-2"></i>
@@ -1876,6 +2002,12 @@ function initPatrolFunctionality() {
 		// Reset timing metrics when scanner stops
 		qrScannerStartTime = null;
 		
+		// Clear OCR fallback timer
+		if (ocrFallbackTimer) {
+			clearTimeout(ocrFallbackTimer);
+			ocrFallbackTimer = null;
+		}
+		
 		return new Promise(resolve => {
 			try {
 				if (!qrScanner) {
@@ -2277,7 +2409,7 @@ function initPatrolFunctionality() {
 					// Permission granted - stop test stream and start scanner
 					stream.getTracks().forEach(track => track.stop());
 					console.log('[QR DEBUG] Camera permission granted, ensuring inline scanner and starting...');
-					ensureInlineScanner(true);
+		ensureInlineScanner(true);
 				})
 				.catch(function(error) {
 					console.error('[QR DEBUG] Camera permission error:', error);
@@ -2326,6 +2458,204 @@ function initPatrolFunctionality() {
 		}
 		ensureInlineScanner(true);
 	});
+	
+	// OCR ONLY MODE - Continuous OCR text detection
+	let ocrVideoStream = null;
+	let ocrVideoTrack = null;
+	let ocrInterval = null;
+	
+	// Start OCR camera and continuous text detection
+	$('#btn-start-ocr').off('click').on('click', function() {
+		console.log('[OCR] Starting OCR camera...');
+		
+		if (ocrVideoStream) {
+			// Already running, stop it
+			stopOCRCamera();
+			$(this).html('<i class="fas fa-camera me-2"></i>Mulai OCR');
+			return;
+		}
+		
+		// Check if Tesseract is loaded
+		if (typeof Tesseract === 'undefined') {
+			Swal.fire('Error', 'OCR library tidak tersedia. Pastikan koneksi internet aktif.', 'error');
+			return;
+		}
+		
+		// Request camera access
+		if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+			const videoContainer = $('#ocr-video-container');
+			const videoElement = document.getElementById('ocr-video');
+			const statusDiv = $('#ocr-status');
+			
+			statusDiv.html(`
+				<div class="alert alert-info">
+					<i class="fas fa-spinner fa-spin me-2"></i>
+					<strong>Mengakses kamera...</strong>
+				</div>
+			`);
+			
+			navigator.mediaDevices.getUserMedia({ 
+				video: { 
+					facingMode: 'environment',
+					width: { ideal: 1280 },
+					height: { ideal: 720 }
+				} 
+			}).then(function(stream) {
+				ocrVideoStream = stream;
+				ocrVideoTrack = stream.getVideoTracks()[0];
+				videoElement.srcObject = stream;
+				
+				videoElement.onloadedmetadata = function() {
+					videoContainer.show();
+					statusDiv.html(`
+						<div class="alert alert-success">
+							<i class="fas fa-camera me-2"></i>
+							<strong>Kamera aktif - Membaca teks dengan OCR...</strong>
+						</div>
+					`);
+					
+					// Start continuous OCR
+					startContinuousOCR();
+					$('#btn-start-ocr').html('<i class="fas fa-stop me-2"></i>Stop OCR');
+				};
+				
+				videoElement.play();
+			}).catch(function(error) {
+				console.error('[OCR] Camera error:', error);
+				let errorMsg = 'Tidak dapat mengakses kamera.';
+				if (error.name === 'NotAllowedError') {
+					errorMsg = 'Izin kamera ditolak.';
+				} else if (error.name === 'NotFoundError') {
+					errorMsg = 'Kamera tidak ditemukan.';
+				}
+				
+				statusDiv.html(`
+					<div class="alert alert-danger">
+						<i class="fas fa-exclamation-triangle me-2"></i>
+						<strong>${errorMsg}</strong>
+					</div>
+				`);
+			});
+		} else {
+			Swal.fire('Error', 'Browser tidak mendukung akses kamera.', 'error');
+		}
+	});
+	
+	function startContinuousOCR() {
+		if (ocrInterval) {
+			clearInterval(ocrInterval);
+		}
+		
+		// Run OCR every 2 seconds
+		ocrInterval = setInterval(function() {
+			runOCRDetection();
+		}, 2000);
+		
+		// Run immediately
+		runOCRDetection();
+	}
+	
+	function runOCRDetection() {
+		const videoElement = document.getElementById('ocr-video');
+		if (!videoElement || videoElement.readyState !== 4) {
+			return;
+		}
+		
+		const canvas = document.createElement('canvas');
+		canvas.width = videoElement.videoWidth;
+		canvas.height = videoElement.videoHeight;
+		const ctx = canvas.getContext('2d');
+		ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+		
+		canvas.toBlob(function(blob) {
+			if (!blob) {
+				return;
+			}
+			
+			// Update status
+			$('#ocr-status').html(`
+				<div class="alert alert-info">
+					<i class="fas fa-spinner fa-spin me-2"></i>
+					<strong>Memproses OCR...</strong>
+				</div>
+			`);
+			
+			// Run OCR
+			Tesseract.recognize(blob, 'eng', {
+				logger: m => {
+					if (m.status === 'recognizing text') {
+						console.log('[OCR] Progress:', Math.round(m.progress * 100) + '%');
+					}
+				}
+			}).then(function(result) {
+				const ocrText = result.data.text || '';
+				console.log('[OCR] Detected text:', ocrText);
+				
+				// Display all detected text
+				if (ocrText.trim()) {
+					$('#ocr-detected-text').text(ocrText);
+					$('#qr-scan-result').show();
+					
+					// Update status
+					$('#ocr-status').html(`
+						<div class="alert alert-success">
+							<i class="fas fa-check-circle me-2"></i>
+							<strong>Teks terdeteksi!</strong>
+							<br>
+							<small>Memperbarui setiap 2 detik...</small>
+						</div>
+					`);
+				} else {
+					$('#ocr-status').html(`
+						<div class="alert alert-warning">
+							<i class="fas fa-search me-2"></i>
+							<strong>Tidak ada teks terdeteksi</strong>
+							<br>
+							<small>Mencoba lagi...</small>
+						</div>
+					`);
+				}
+			}).catch(function(error) {
+				console.error('[OCR] Error:', error);
+				$('#ocr-status').html(`
+					<div class="alert alert-danger">
+						<i class="fas fa-exclamation-triangle me-2"></i>
+						<strong>Error OCR: ${error.message}</strong>
+					</div>
+				`);
+			});
+		}, 'image/jpeg', 0.8);
+	}
+	
+	function stopOCRCamera() {
+		if (ocrInterval) {
+			clearInterval(ocrInterval);
+			ocrInterval = null;
+		}
+		
+		if (ocrVideoTrack) {
+			ocrVideoTrack.stop();
+			ocrVideoTrack = null;
+		}
+		
+		if (ocrVideoStream) {
+			ocrVideoStream.getTracks().forEach(track => track.stop());
+			ocrVideoStream = null;
+		}
+		
+		const videoElement = document.getElementById('ocr-video');
+		if (videoElement) {
+			videoElement.srcObject = null;
+		}
+		
+		$('#ocr-video-container').hide();
+		$('#ocr-status').html(`
+			<div class="alert alert-info">
+				<i class="fas fa-stop me-2"></i>
+				<strong>OCR dihentikan</strong>
+			</div>
+		`);
+	}
 	
 	$('#btn-floating-photo, #btn-scroll-to-photo').click(function() {
 		focusPhotoCard();
@@ -2434,7 +2764,7 @@ function initPatrolFunctionality() {
 	$(document).on('click', '#btn-manual-qr-input', function() {
 		showManualQREntry();
 	});
-	
+
 	$('#btn-manual-validation').click(function() {
 		if (!currentCompanyId) {
 			Swal.fire('Error', 'Company belum terdeteksi. Pastikan GPS aktif dan Anda berada di lokasi company.', 'error');
@@ -2604,17 +2934,95 @@ function initPatrolFunctionality() {
 		
 		// Check if Html5Qrcode is available
 		if (typeof Html5Qrcode === 'undefined') {
-			console.error('Html5Qrcode library not loaded');
+			console.error('[QR DIAGNOSTIC] Html5Qrcode library not loaded');
+			mobileDebugLog('ERROR: Html5Qrcode library not loaded', 'error');
 			Swal.fire('Error', 'QR Scanner library tidak tersedia. Pastikan koneksi internet aktif untuk memuat library.', 'error');
 			return;
 		}
 		
+		// DIAGNOSTIC: Verify Html5Qrcode is fully loaded
+		const libraryCheck = {
+			Html5Qrcode: typeof Html5Qrcode,
+			Html5QrcodeScanType: typeof Html5QrcodeScanType,
+			hasStart: typeof Html5Qrcode.prototype.start === 'function',
+			hasStop: typeof Html5Qrcode.prototype.stop === 'function',
+			hasClear: typeof Html5Qrcode.prototype.clear === 'function'
+		};
+		console.log('[QR DIAGNOSTIC] Html5Qrcode library check:', libraryCheck);
+		mobileDebugLog(`Library check: Html5Qrcode=${libraryCheck.Html5Qrcode}, hasStart=${libraryCheck.hasStart}, hasStop=${libraryCheck.hasStop}`, 'info');
+		
+		// DIAGNOSTIC: Verify Html5Qrcode is fully loaded
+		console.log('[QR DIAGNOSTIC] Html5Qrcode library check:', {
+			Html5Qrcode: typeof Html5Qrcode,
+			Html5QrcodeScanType: typeof Html5QrcodeScanType,
+			hasStart: typeof Html5Qrcode.prototype.start === 'function',
+			hasStop: typeof Html5Qrcode.prototype.stop === 'function'
+		});
+		mobileDebugLog('Html5Qrcode library loaded and verified', 'info');
+		
 		// Check if qr-reader element exists
 		let qrReaderElementCheck = document.getElementById('qr-reader');
 		if (!qrReaderElementCheck) {
-			console.error('qr-reader element not found');
+			console.error('[QR DIAGNOSTIC] qr-reader element not found in DOM');
+			mobileDebugLog('ERROR: qr-reader element not found in DOM', 'error');
 			Swal.fire('Error', 'Elemen scanner tidak ditemukan', 'error');
 			return;
+		}
+		
+		// DIAGNOSTIC: Check element visibility and dimensions
+		const computedStyle = window.getComputedStyle(qrReaderElementCheck);
+		const elementRect = qrReaderElementCheck.getBoundingClientRect();
+		const diagnosticInfo = {
+			elementExists: !!qrReaderElementCheck,
+			display: computedStyle.display,
+			visibility: computedStyle.visibility,
+			opacity: computedStyle.opacity,
+			width: elementRect.width,
+			height: elementRect.height,
+			top: elementRect.top,
+			left: elementRect.left,
+			parentDisplay: qrReaderElementCheck.parentElement ? window.getComputedStyle(qrReaderElementCheck.parentElement).display : 'N/A',
+			parentVisibility: qrReaderElementCheck.parentElement ? window.getComputedStyle(qrReaderElementCheck.parentElement).visibility : 'N/A',
+			isVisible: computedStyle.display !== 'none' && 
+			          computedStyle.visibility !== 'hidden' && 
+			          parseFloat(computedStyle.opacity) > 0 &&
+			          elementRect.width > 0 && 
+			          elementRect.height > 0
+		};
+		
+		console.log('[QR DIAGNOSTIC] Element state check:', diagnosticInfo);
+		mobileDebugLog(`Element diagnostic: visible=${diagnosticInfo.isVisible}, display=${diagnosticInfo.display}, size=${elementRect.width}x${elementRect.height}`, 
+			diagnosticInfo.isVisible ? 'info' : 'warning');
+		
+		// Warn if element is not visible
+		if (!diagnosticInfo.isVisible) {
+			console.warn('[QR DIAGNOSTIC] WARNING: qr-reader element is not visible!', {
+				display: diagnosticInfo.display,
+				visibility: diagnosticInfo.visibility,
+				opacity: diagnosticInfo.opacity,
+				dimensions: `${elementRect.width}x${elementRect.height}`,
+				parentDisplay: diagnosticInfo.parentDisplay
+			});
+			mobileDebugLog(`WARNING: Element not visible - display:${diagnosticInfo.display}, visibility:${diagnosticInfo.visibility}, size:${elementRect.width}x${elementRect.height}`, 'warning');
+			
+			// Try to make it visible
+			qrReaderElementCheck.style.display = 'block';
+			qrReaderElementCheck.style.visibility = 'visible';
+			qrReaderElementCheck.style.opacity = '1';
+			
+			// Check parent containers
+			let parent = qrReaderElementCheck.parentElement;
+			let parentLevel = 0;
+			while (parent && parentLevel < 5) {
+				const parentStyle = window.getComputedStyle(parent);
+				if (parentStyle.display === 'none') {
+					console.warn(`[QR DIAGNOSTIC] Parent at level ${parentLevel} has display:none:`, parent);
+					mobileDebugLog(`Parent level ${parentLevel} has display:none`, 'warning');
+					parent.style.display = 'block';
+				}
+				parent = parent.parentElement;
+				parentLevel++;
+			}
 		}
 		
 		// Clear the element before starting
@@ -2643,8 +3051,7 @@ function initPatrolFunctionality() {
 		}
 		
 		// Mobile-friendly configuration
-		const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-		
+		// Use the isMobile from outer scope (initPatrolFunctionality)
 		const config = {
 			fps: isMobile ? 30 : 30, // Increased to 30 FPS for faster detection (1-2 second target)
 			qrbox: function(viewfinderWidth, viewfinderHeight) {
@@ -2679,12 +3086,34 @@ function initPatrolFunctionality() {
 		const qrReaderElement = document.getElementById('qr-reader');
 		if (!qrReaderElement) {
 			console.error('[QR DEBUG] ERROR: qr-reader element not found!');
+			mobileDebugLog('ERROR: qr-reader element not found before creating scanner', 'error');
 			Swal.fire('Error', 'Elemen scanner tidak ditemukan', 'error');
 			return Promise.reject('qr-reader element not found');
 		}
 		console.log('[QR DEBUG] qr-reader element found:', qrReaderElement);
 		
+		// DIAGNOSTIC: Verify element state before creating scanner
+		const preInitCheck = {
+			elementExists: !!qrReaderElement,
+			elementId: qrReaderElement ? qrReaderElement.id : 'N/A',
+			innerHTML: qrReaderElement ? qrReaderElement.innerHTML.length : 0,
+			clientWidth: qrReaderElement ? qrReaderElement.clientWidth : 0,
+			clientHeight: qrReaderElement ? qrReaderElement.clientHeight : 0,
+			computedDisplay: qrReaderElement ? window.getComputedStyle(qrReaderElement).display : 'N/A'
+		};
+		console.log('[QR DIAGNOSTIC] Pre-initialization check:', preInitCheck);
+		mobileDebugLog(`Pre-init: element=${preInitCheck.elementExists}, size=${preInitCheck.clientWidth}x${preInitCheck.clientHeight}, display=${preInitCheck.computedDisplay}`, 'info');
+		
+		try {
 		qrScanner = new Html5Qrcode("qr-reader");
+			console.log('[QR DIAGNOSTIC] Html5Qrcode instance created successfully');
+			mobileDebugLog('Html5Qrcode instance created', 'info');
+		} catch (error) {
+			console.error('[QR DIAGNOSTIC] Failed to create Html5Qrcode instance:', error);
+			mobileDebugLog(`ERROR: Failed to create scanner instance - ${error.message}`, 'error');
+			Swal.fire('Error', 'Gagal membuat instance scanner: ' + error.message, 'error');
+			return Promise.reject(error);
+		}
 		console.log('[QR DEBUG] Html5Qrcode instance created:', qrScanner);
 		
 		// Wrap callbacks to ensure they're called
@@ -2711,6 +3140,7 @@ function initPatrolFunctionality() {
 		
 		// Try environment camera first, then user camera as fallback
 		// On mobile, prioritize environment (back camera)
+		// Use the isMobile from outer scope (initPatrolFunctionality)
 		const cameraConfigs = isMobile ? [
 			{ facingMode: "environment" },
 			"environment",
@@ -2726,6 +3156,7 @@ function initPatrolFunctionality() {
 		let currentConfigIndex = 0;
 		
 		function tryStartScanner() {
+			// Use isMobile from outer scope (initPatrolFunctionality)
 			if (currentConfigIndex >= cameraConfigs.length) {
 				// All camera configs failed - reset scanner state
 				qrScanner = null;
@@ -2748,6 +3179,7 @@ function initPatrolFunctionality() {
 					</div>
 				`);
 				
+				mobileDebugLog('All camera configs failed - cannot access camera', 'error');
 				Swal.fire({
 					icon: 'error',
 					title: 'Error Kamera',
@@ -2771,6 +3203,25 @@ function initPatrolFunctionality() {
 			// Record scanner start time for timing metrics
 			qrScannerStartTime = Date.now();
 			console.log('[QR TIMING] Scanner started at:', new Date(qrScannerStartTime).toISOString());
+			mobileDebugLog(`Scanner starting with config ${currentConfigIndex + 1}/${cameraConfigs.length}`, 'info');
+			
+			// Clear any existing OCR fallback timer
+			if (ocrFallbackTimer) {
+				clearTimeout(ocrFallbackTimer);
+				ocrFallbackTimer = null;
+			}
+			
+			// Verify Tesseract before setting OCR fallback
+			if (verifyTesseractLoaded()) {
+				// Set OCR fallback timer (1 second)
+				ocrFallbackTimer = setTimeout(function() {
+					console.log('[OCR FALLBACK] QR detection timeout - triggering OCR fallback');
+					mobileDebugLog('QR detection timeout - triggering OCR fallback', 'warning');
+					processOCRFallback();
+				}, 1000);
+			} else {
+				mobileDebugLog('OCR fallback disabled - Tesseract.js not loaded', 'error');
+			}
 			
 			console.log('[QR DEBUG] Starting scanner with config:', {
 				cameraConfig: cameraConfig,
@@ -2779,6 +3230,23 @@ function initPatrolFunctionality() {
 				verbose: config.verbose
 			});
 			
+			// DIAGNOSTIC: Final check before starting
+			const finalCheck = {
+				qrScannerExists: !!qrScanner,
+				elementExists: !!document.getElementById('qr-reader'),
+				elementVisible: (() => {
+					const el = document.getElementById('qr-reader');
+					if (!el) return false;
+					const style = window.getComputedStyle(el);
+					return style.display !== 'none' && style.visibility !== 'hidden';
+				})(),
+				cameraConfig: cameraConfig,
+				configFps: config.fps,
+				Html5QrcodeLoaded: typeof Html5Qrcode !== 'undefined'
+			};
+			console.log('[QR DIAGNOSTIC] Final check before start():', finalCheck);
+			mobileDebugLog(`Final check: scanner=${finalCheck.qrScannerExists}, element=${finalCheck.elementExists}, visible=${finalCheck.elementVisible}, library=${finalCheck.Html5QrcodeLoaded}`, 'info');
+			
 			qrScanner.start(
 				cameraConfig,
 				config,
@@ -2786,21 +3254,57 @@ function initPatrolFunctionality() {
 				wrappedOnScanFailure
 			).then(() => {
 				console.log('[QR DEBUG] Scanner start() promise resolved - scanner should be running');
+				mobileDebugLog('Scanner start() promise resolved', 'info');
+				
+				// DIAGNOSTIC: Verify scanner actually started
+				setTimeout(() => {
+					const postStartCheck = {
+						scannerRunning: (() => {
+							if (!qrScanner) return false;
+							if (typeof qrScanner.isScanning === 'function') {
+								return qrScanner.isScanning();
+							}
+							return qrScanner.isScanning === true;
+						})(),
+						videoElement: (() => {
+							const el = document.getElementById('qr-reader');
+							if (!el) return null;
+							return el.querySelector('video');
+						})(),
+						videoPlaying: (() => {
+							const el = document.getElementById('qr-reader');
+							if (!el) return false;
+							const video = el.querySelector('video');
+							return video && !video.paused && video.readyState >= 2;
+						})(),
+						videoReadyState: (() => {
+							const el = document.getElementById('qr-reader');
+							if (!el) return 'N/A';
+							const video = el.querySelector('video');
+							return video ? video.readyState : 'N/A';
+						})()
+					};
+					console.log('[QR DIAGNOSTIC] Post-start verification:', postStartCheck);
+					mobileDebugLog(`Post-start: running=${postStartCheck.scannerRunning}, video=${!!postStartCheck.videoElement}, playing=${postStartCheck.videoPlaying}, readyState=${postStartCheck.videoReadyState}`, 
+						postStartCheck.scannerRunning && postStartCheck.videoPlaying ? 'info' : 'warning');
+				}, 1000);
 				
 				// Verify video element was created
 				setTimeout(() => {
 					const qrReaderElement = document.getElementById('qr-reader');
 					if (qrReaderElement) {
 						const video = qrReaderElement.querySelector('video');
-						console.log('[QR DEBUG] Video element check:', {
+						const videoCheck = {
 							videoExists: !!video,
 							videoSrcObject: video ? !!video.srcObject : false,
 							videoReadyState: video ? video.readyState : 'N/A',
 							videoPlaying: video ? !video.paused : false
-						});
+						};
+						console.log('[QR DEBUG] Video element check:', videoCheck);
 						
 						if (!video) {
 							console.error('[QR DEBUG] ERROR: Video element not found in qr-reader!');
+							mobileDebugLog('ERROR: Video element not found in qr-reader!', 'error');
 							$('#qr-scanning-status').html(`
 								<div class="alert alert-danger">
 									<i class="fas fa-exclamation-triangle me-2"></i>
@@ -2811,9 +3315,13 @@ function initPatrolFunctionality() {
 							`);
 						} else if (!video.srcObject) {
 							console.warn('[QR DEBUG] WARNING: Video element exists but has no srcObject');
+							mobileDebugLog('WARNING: Video element exists but has no srcObject', 'warning');
 						} else {
 							console.log('[QR DEBUG] Video element looks good - scanner should be working');
+							mobileDebugLog(`Video element ready (readyState: ${video.readyState}, playing: ${!video.paused})`, 'info');
 						}
+					} else {
+						mobileDebugLog('ERROR: qr-reader element not found!', 'error');
 					}
 				}, 500);
 				
@@ -2831,6 +3339,7 @@ function initPatrolFunctionality() {
 					
 					if (!isRunning) {
 						console.warn('[QR DEBUG] Scanner reported as not running after start');
+						mobileDebugLog('WARNING: Scanner reported as not running after start', 'warning');
 						$('#qr-scanning-status').html(`
 							<div class="alert alert-warning">
 								<i class="fas fa-exclamation-triangle me-2"></i>
@@ -2841,6 +3350,7 @@ function initPatrolFunctionality() {
 						`);
 					} else {
 						console.log('[QR DEBUG] Scanner is confirmed running - QR detection should work');
+						mobileDebugLog('Scanner confirmed running - QR detection active', 'info');
 					}
 				}, 1000);
 				
@@ -2902,14 +3412,19 @@ function initPatrolFunctionality() {
 				let errorMsg = 'Gagal mengakses kamera. ';
 				if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
 					errorMsg = 'Izin kamera ditolak. Silakan aktifkan izin kamera di pengaturan browser.';
+					mobileDebugLog('Camera permission denied', 'error');
 				} else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
 					errorMsg = 'Kamera tidak ditemukan di perangkat ini.';
+					mobileDebugLog('Camera not found', 'error');
 				} else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
 					errorMsg = 'Kamera sedang digunakan oleh aplikasi lain.';
+					mobileDebugLog('Camera in use by another app', 'error');
 				} else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
 					errorMsg = 'Konfigurasi kamera tidak didukung. Mencoba konfigurasi lain...';
+					mobileDebugLog('Camera config not supported, trying next...', 'warning');
 				} else {
 					errorMsg += 'Error: ' + (err.message || err.toString());
+					mobileDebugLog(`Camera error: ${err.name} - ${err.message}`, 'error');
 				}
 				
 				$('#qr-scanning-status').html(`
@@ -3189,6 +3704,13 @@ function initPatrolFunctionality() {
 	
 	// QR scan success - WhatsApp-like behavior: auto-process without confirmation
 	function onScanSuccess(decodedText, decodedResult) {
+		// Clear OCR fallback timer since QR was detected
+		if (ocrFallbackTimer) {
+			clearTimeout(ocrFallbackTimer);
+			ocrFallbackTimer = null;
+			console.log('[QR SUCCESS] OCR fallback timer cleared - QR detected successfully');
+		}
+		
 		// Calculate detection time
 		const detectionTime = qrScannerStartTime ? ((Date.now() - qrScannerStartTime) / 1000).toFixed(2) : null;
 		
@@ -3197,6 +3719,7 @@ function initPatrolFunctionality() {
 		console.log('[QR SUCCESS] Detection time:', detectionTime !== null ? detectionTime + ' seconds' : 'N/A');
 		console.log('[QR SUCCESS] Company ID:', currentCompanyId);
 		console.log('[QR SUCCESS] Patrol options:', patrolOptions ? patrolOptions.length : 0);
+		mobileDebugLog(`QR Code detected: ${decodedText} (${detectionTime !== null ? detectionTime + 's' : 'N/A'})`, 'info');
 		
 		const scannerRunning = isScannerRunning();
 		if (!scannerRunning) {
@@ -3208,7 +3731,8 @@ function initPatrolFunctionality() {
 			? `<br><small class="text-muted">Ditemukan dalam ${detectionTime} detik</small>`
 			: '';
 		
-		$('#qr-scanning-status').html(`
+		// Ensure status element is visible and update immediately
+		$('#qr-scanning-status').show().html(`
 			<div class="alert alert-info">
 				<i class="fas fa-spinner fa-spin me-2"></i>
 				<strong>QR Code terdeteksi!</strong>
@@ -3248,6 +3772,171 @@ function initPatrolFunctionality() {
 			console.warn('[QR DEBUG] Actual scanner error:', error);
 		}
 		// Otherwise, silently ignore - this is normal scanning behavior
+	}
+	
+	/**
+	 * Process OCR fallback when QR scanning fails after 1 second
+	 * Captures video frame and runs Tesseract.js OCR to extract PATROL_ pattern
+	 */
+	function processOCRFallback() {
+		// Only process if OCR timer was actually triggered (not cleared by QR success)
+		if (!ocrFallbackTimer) {
+			console.log('[OCR FALLBACK] Timer was cleared - QR likely detected, skipping OCR');
+			return;
+		}
+		
+		// Clear the timer to prevent multiple triggers
+		ocrFallbackTimer = null;
+		
+		console.log('[OCR FALLBACK] Starting OCR processing...');
+		mobileDebugLog('OCR fallback triggered - starting OCR processing', 'info');
+		
+		// Check if Tesseract.js is available
+		if (typeof Tesseract === 'undefined') {
+			console.error('[OCR FALLBACK] Tesseract.js not loaded');
+			mobileDebugLog('ERROR: Tesseract.js not loaded - OCR fallback disabled', 'error');
+			// Show error but don't break the flow - user can still use manual input
+		$('#qr-scanning-status').html(`
+			<div class="alert alert-warning">
+					<i class="fas fa-exclamation-triangle me-2"></i>
+					<strong>OCR tidak tersedia</strong>
+					<br>
+					<small>Gunakan tombol "Validasi Manual" atau "Masukkan QR Code Manual"</small>
+				</div>
+			`);
+			return;
+		}
+		
+		// Get video element from QR scanner
+		const qrReaderElement = document.getElementById('qr-reader');
+		if (!qrReaderElement) {
+			console.error('[OCR FALLBACK] qr-reader element not found');
+			return;
+		}
+		
+		// Find video element inside qr-reader
+		const videoElement = qrReaderElement.querySelector('video');
+		if (!videoElement) {
+			console.error('[OCR FALLBACK] Video element not found in qr-reader');
+			$('#qr-scanning-status').html(`
+				<div class="alert alert-warning">
+					<i class="fas fa-exclamation-triangle me-2"></i>
+					<strong>Video tidak tersedia untuk OCR</strong>
+					<br>
+					<small>Gunakan tombol "Validasi Manual" atau "Masukkan QR Code Manual"</small>
+				</div>
+			`);
+			return;
+		}
+		
+		// Show OCR processing status
+		$('#qr-scanning-status').html(`
+			<div class="alert alert-info">
+				<i class="fas fa-spinner fa-spin me-2"></i>
+				<strong>Memproses OCR...</strong>
+				<br>
+				<small>Mengambil frame dan membaca teks...</small>
+			</div>
+		`);
+		
+		// Capture video frame to canvas
+		const canvas = document.createElement('canvas');
+		canvas.width = videoElement.videoWidth;
+		canvas.height = videoElement.videoHeight;
+		const ctx = canvas.getContext('2d');
+		ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+		
+		// Convert canvas to image data
+		canvas.toBlob(function(blob) {
+			if (!blob) {
+				console.error('[OCR FALLBACK] Failed to capture frame');
+				$('#qr-scanning-status').html(`
+					<div class="alert alert-warning">
+						<i class="fas fa-exclamation-triangle me-2"></i>
+						<strong>Gagal mengambil frame</strong>
+						<br>
+						<small>Gunakan tombol "Validasi Manual" atau "Masukkan QR Code Manual"</small>
+					</div>
+				`);
+				return;
+			}
+			
+			// Initialize Tesseract worker if not already initialized
+			if (!tesseractWorker) {
+				console.log('[OCR FALLBACK] Initializing Tesseract worker...');
+				tesseractWorker = Tesseract.createWorker();
+			}
+			
+			// Run OCR on the captured image
+			Tesseract.recognize(blob, 'eng', {
+				logger: m => {
+					if (m.status === 'recognizing text') {
+						console.log('[OCR FALLBACK] Progress:', Math.round(m.progress * 100) + '%');
+					}
+				}
+			}).then(function(result) {
+				const ocrText = result.data.text || '';
+				console.log('[OCR FALLBACK] OCR result:', ocrText);
+				
+				// Extract PATROL_ pattern using regex
+				const patrolPattern = /PATROL_[0-9A-Z_]+/i;
+				const match = ocrText.match(patrolPattern);
+				
+				const ocrText = result.data.text || '';
+				console.log('[OCR FALLBACK] OCR result:', ocrText);
+				
+				// Display all detected OCR text in the OCR result section
+				if (ocrText.trim()) {
+					$('#ocr-detected-text').text(ocrText);
+					$('#qr-scan-result').show();
+					
+					// Update status
+					$('#qr-scanning-status').html(`
+						<div class="alert alert-info">
+							<i class="fas fa-eye me-2"></i>
+							<strong>Teks terdeteksi via OCR!</strong>
+							<br>
+							<small>Memproses teks yang terdeteksi...</small>
+						</div>
+					`);
+				}
+				
+				// Extract PATROL_ pattern using regex
+				const patrolPattern = /PATROL_[0-9A-Z_]+/i;
+				const match = ocrText.match(patrolPattern);
+				
+				if (match && match[0]) {
+					const extractedCode = match[0];
+					console.log('[OCR FALLBACK] PATROL code extracted:', extractedCode);
+					mobileDebugLog(`OCR success: PATROL code extracted - ${extractedCode}`, 'info');
+					
+					// Process the extracted code as if it were a QR code
+					handlePatrolDetection(extractedCode, { autoProcess: true, source: 'ocr' });
+				} else {
+					console.log('[OCR FALLBACK] No PATROL pattern found in OCR text');
+					mobileDebugLog('OCR completed but no PATROL pattern found', 'warning');
+					$('#qr-scanning-status').html(`
+						<div class="alert alert-warning">
+							<i class="fas fa-exclamation-triangle me-2"></i>
+							<strong>Kode Patrol tidak ditemukan</strong>
+							<br>
+							<small>Gunakan tombol "Validasi Manual" atau "Masukkan QR Code Manual"</small>
+						</div>
+					`);
+				}
+			}).catch(function(error) {
+				console.error('[OCR FALLBACK] OCR processing error:', error);
+				mobileDebugLog(`OCR processing error: ${error.message || error}`, 'error');
+				$('#qr-scanning-status').html(`
+					<div class="alert alert-warning">
+						<i class="fas fa-exclamation-triangle me-2"></i>
+						<strong>Error saat memproses OCR</strong>
+						<br>
+						<small>Gunakan tombol "Validasi Manual" atau "Masukkan QR Code Manual"</small>
+					</div>
+				`);
+			});
+		}, 'image/jpeg', 0.95);
 	}
 	
 	function handlePatrolDetection(barcode, options = {}) {
@@ -3415,7 +4104,7 @@ function initPatrolFunctionality() {
 				confirmButtonText: 'OK',
 				footer: '<button type="button" class="btn btn-link text-primary p-0" id="btn-manual-qr-entry">Masukkan QR Code Manual</button>'
 			}).then(() => {
-				restartScannerWithDelay();
+			restartScannerWithDelay();
 			});
 			
 			// Add click handler for manual entry button
@@ -3480,36 +4169,45 @@ function initPatrolFunctionality() {
 		markPatrolAsScanned(matchedPatrol.id_patrol);
 		setNextPatrolInfo(getNextPendingPatrol());
 		
-		// Show success status with timing info
+		// Show success status with timing info - ensure it's visible immediately
+		const detectionTime = options.detectionTime || null;
 		const timingDisplay = detectionTime !== null 
 			? `<br><small class="text-muted">Ditemukan dalam ${detectionTime} detik</small>`
 			: '';
+		const sourceDisplay = options.source === 'ocr'
+			? '<br><small class="text-muted"><i class="fas fa-eye me-1"></i>Ditemukan via OCR</small>'
+			: '';
 		
-		$('#qr-scanning-status').html(`
+		// Update status immediately and ensure it's visible
+		$('#qr-scanning-status').show().html(`
 			<div class="alert alert-success">
 				<i class="fas fa-check-circle me-2"></i>
 				<strong>QR Code Berhasil!</strong>
 				<br>
 				<small>${matchedPatrol.nama_patrol}</small>
 				${timingDisplay}
+				${sourceDisplay}
 			</div>
 		`);
 		
-		setTimeout(() => {
-			showStep(2);
-			// Ensure text is a string
+		// Show success toast immediately
 			const matchedPatrolName = matchedPatrol && matchedPatrol.nama_patrol 
 				? String(matchedPatrol.nama_patrol) 
 				: 'Patrol siap diisi.';
+		const successTitle = options.source === 'ocr' ? 'QR Terdeteksi (via OCR)' : 'QR Terdeteksi';
+		
 			Swal.fire({
 				icon: 'success',
-				title: isTestMode ? 'QR Terdeteksi' : 'QR Terdeteksi',
+			title: successTitle,
 				text: matchedPatrolName,
-				timer: 1500,
-				showConfirmButton: false,
-				toast: true,
-				position: 'top-end'
-			});
+			timer: 2000,
+			showConfirmButton: false,
+			toast: true,
+			position: 'top-end'
+		});
+		
+		setTimeout(() => {
+			showStep(2);
 		}, 200);
 	}
 	
@@ -3837,7 +4535,7 @@ function initPatrolFunctionality() {
 				console.error('GPS Error:', err);
 				// Use cached location if GPS fails, or null if no cached location
 				if (currentLocation) {
-					capturePhotoWithLocation(currentLocation);
+				capturePhotoWithLocation(currentLocation);
 				} else {
 					// Only show error modal if not shown recently (debounce)
 					const now = Date.now();
