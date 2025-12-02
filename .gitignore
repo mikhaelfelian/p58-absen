@@ -79,7 +79,7 @@ public/file/*
 /writable/*
 
 # Ignore compressed archives
-# *.zip
+*.zip
 *.rar
 
 cpanel_user.txt
