@@ -312,6 +312,14 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 					$result = ['status' => 'error', 'message' => 'Data gagal disimpan'];
 				}
 			} else if ($data['jenis_presensi'] == 'pulang') {
+				// Validate: Check if user has an active shift (must have masuk first)
+				$last = $this->presensiModel->getLastPresensi($id_user);
+				if (!$last || !empty($last['tgl_keluar'])) {
+					$result = ['status' => 'error', 'message' => 'Anda belum melakukan presensi masuk. Silakan lakukan presensi masuk terlebih dahulu.'];
+					echo json_encode($result);
+					return;
+				}
+				
 				// Clock-out: Update latest clock-in record
 				$jamKerjaTarget = 12; // Default
 				if ($assignment) {

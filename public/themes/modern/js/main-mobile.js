@@ -3883,47 +3883,32 @@ function initPatrolFunctionality() {
 				if (ocrText.trim()) {
 					$('#ocr-detected-text').text(ocrText);
 					
-					// Force display on mobile browsers - use direct DOM manipulation for maximum compatibility
+					// Force display on mobile browsers - remove Bootstrap d-none class and ensure visibility
 					const ocrResultEl = $('#ocr-scan-result');
 					if (ocrResultEl.length) {
-						const ocrResultDom = ocrResultEl[0];
-						
 						// Remove Bootstrap d-none class
 						ocrResultEl.removeClass('d-none');
-						
-						// Direct DOM style manipulation (most reliable on mobile)
-						if (ocrResultDom) {
-							ocrResultDom.style.setProperty('display', 'block', 'important');
-							ocrResultDom.style.setProperty('visibility', 'visible', 'important');
-							ocrResultDom.style.setProperty('opacity', '1', 'important');
-						}
-						
-						// Also set via jQuery as fallback
-						ocrResultEl.css({
-							'display': 'block',
-							'visibility': 'visible',
-							'opacity': '1'
-						});
+						// Force CSS overrides for mobile compatibility
+						ocrResultEl.css('display', 'block');
+						ocrResultEl.css('visibility', 'visible');
+						ocrResultEl.css('opacity', '1');
+						// Add inline style with !important for mobile browsers
+						const currentStyle = ocrResultEl.attr('style') || '';
+						ocrResultEl.attr('style', currentStyle + '; display: block !important; visibility: visible !important;');
 						
 						// Ensure parent containers are visible
 						const parentWrapper = ocrResultEl.closest('#qr-inline-wrapper');
 						if (parentWrapper.length) {
 							parentWrapper.css('display', 'block');
 							parentWrapper.show();
-							const parentDom = parentWrapper[0];
-							if (parentDom) {
-								parentDom.style.display = 'block';
-							}
 						}
 						
-						// Force reflow and scroll into view on mobile
+						// Scroll into view on mobile
+						const ocrResultDom = ocrResultEl[0];
 						if (ocrResultDom) {
-							// Force browser reflow
-							void ocrResultDom.offsetHeight;
-							
 							setTimeout(() => {
 								ocrResultDom.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-							}, 150);
+							}, 100);
 						}
 						
 						// Debug logging for mobile
@@ -3931,11 +3916,9 @@ function initPatrolFunctionality() {
 							exists: ocrResultEl.length > 0,
 							hasDNone: ocrResultEl.hasClass('d-none'),
 							display: ocrResultEl.css('display'),
-							computedDisplay: ocrResultDom ? window.getComputedStyle(ocrResultDom).display : 'N/A',
 							visibility: ocrResultEl.css('visibility'),
 							isVisible: ocrResultEl.is(':visible'),
-							parentVisible: parentWrapper.length > 0 ? parentWrapper.is(':visible') : 'N/A',
-							elementOffsetHeight: ocrResultDom ? ocrResultDom.offsetHeight : 'N/A'
+							parentVisible: parentWrapper.length > 0 ? parentWrapper.is(':visible') : 'N/A'
 						});
 					} else {
 						console.error('[OCR FALLBACK] OCR result element not found in DOM');
@@ -3953,9 +3936,8 @@ function initPatrolFunctionality() {
 				}
 				
 				// Extract PATROL_ pattern using regex - format: PATROL_XXX_XXX_YYYYMMDDHHMMSS
-				// More accurate pattern: PATROL_ + 3 digits (company) + _ + 3 digits (sequence) + _ + 14 digits (timestamp)
-				// Timestamp format: YYYYMMDDHHMMSS (14 digits)
-				const patrolPattern = /PATROL_\d{3}_\d{3}_\d{14}/i;
+				// More accurate pattern: PATROL_ + 3 digits (company) + _ + 3 digits (sequence) + _ + timestamp
+				const patrolPattern = /PATROL_\d{3}_\d{3}_\d+/i;
 				const match = ocrText.match(patrolPattern);
 				
 				if (match && match[0]) {
@@ -4212,47 +4194,32 @@ function initPatrolFunctionality() {
 				<small>${scannedPatrolData.nama_company || (window.nearestCompany ? window.nearestCompany.nama_company : '')}</small>
 			`);
 			
-			// Force display on mobile browsers - use direct DOM manipulation for maximum compatibility
+			// Force display on mobile browsers - remove Bootstrap d-none class and ensure visibility
 			const ocrResultEl = $('#ocr-scan-result');
 			if (ocrResultEl.length) {
-				const ocrResultDom = ocrResultEl[0];
-				
 				// Remove Bootstrap d-none class
 				ocrResultEl.removeClass('d-none');
-				
-				// Direct DOM style manipulation (most reliable on mobile)
-				if (ocrResultDom) {
-					ocrResultDom.style.setProperty('display', 'block', 'important');
-					ocrResultDom.style.setProperty('visibility', 'visible', 'important');
-					ocrResultDom.style.setProperty('opacity', '1', 'important');
-				}
-				
-				// Also set via jQuery as fallback
-				ocrResultEl.css({
-					'display': 'block',
-					'visibility': 'visible',
-					'opacity': '1'
-				});
+				// Force CSS overrides for mobile compatibility
+				ocrResultEl.css('display', 'block');
+				ocrResultEl.css('visibility', 'visible');
+				ocrResultEl.css('opacity', '1');
+				// Add inline style with !important for mobile browsers
+				const currentStyle = ocrResultEl.attr('style') || '';
+				ocrResultEl.attr('style', currentStyle + '; display: block !important; visibility: visible !important;');
 				
 				// Ensure parent containers are visible
 				const parentWrapper = ocrResultEl.closest('#qr-inline-wrapper');
 				if (parentWrapper.length) {
 					parentWrapper.css('display', 'block');
 					parentWrapper.show();
-					const parentDom = parentWrapper[0];
-					if (parentDom) {
-						parentDom.style.display = 'block';
-					}
 				}
 				
-				// Force reflow and scroll into view on mobile
+				// Scroll into view on mobile
+				const ocrResultDom = ocrResultEl[0];
 				if (ocrResultDom) {
-					// Force browser reflow
-					void ocrResultDom.offsetHeight;
-					
 					setTimeout(() => {
 						ocrResultDom.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-					}, 150);
+					}, 100);
 				}
 				
 				// Debug logging for mobile
@@ -4260,11 +4227,9 @@ function initPatrolFunctionality() {
 					exists: ocrResultEl.length > 0,
 					hasDNone: ocrResultEl.hasClass('d-none'),
 					display: ocrResultEl.css('display'),
-					computedDisplay: ocrResultDom ? window.getComputedStyle(ocrResultDom).display : 'N/A',
 					visibility: ocrResultEl.css('visibility'),
 					isVisible: ocrResultEl.is(':visible'),
-					parentVisible: parentWrapper.length > 0 ? parentWrapper.is(':visible') : 'N/A',
-					elementOffsetHeight: ocrResultDom ? ocrResultDom.offsetHeight : 'N/A'
+					parentVisible: parentWrapper.length > 0 ? parentWrapper.is(':visible') : 'N/A'
 				});
 			} else {
 				console.error('[PATROL DETECTION] OCR result element not found in DOM');

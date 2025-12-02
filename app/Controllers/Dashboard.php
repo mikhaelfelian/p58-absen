@@ -416,18 +416,22 @@ class Dashboard extends BaseController
 		foreach ($query['data'] as $key => &$val) 
 		{
 			$val['ignore_urut'] = $no;
+			
+			// Simplified status display following dashboard-user.php pattern
 			if ($val['status'] == 'tidak absen') {
 				$val['status'] = '<span class="badge rounded-pill text-bg-danger">' . $val['status'] . '</span>';
+			} elseif ($val['jenis_presensi'] == 'masuk') {
+				// Always show "Masuk" badge for masuk records
+				$val['status'] = '<span class="badge rounded-pill bg-success">Masuk</span>';
+			} elseif ($val['jenis_presensi'] == 'pulang') {
+				// For pulang: show "Pulang Belum Waktu" if early, otherwise "Pulang"
+				if ($val['status'] == 'pulang awal') {
+					$val['status'] = '<span class="badge rounded-pill bg-warning">Pulang Belum Waktu</span>';
+				} else {
+					$val['status'] = '<span class="badge rounded-pill bg-info">Pulang</span>';
+				}
 			}
-			if ($val['status'] == 'tepat waktu') {
-				$val['status'] = '<span class="badge rounded-pill text-bg-success">' . $val['status'] . '</span>';
-			}
-			if ($val['status'] == 'terlambat') {
-				$val['status'] = '<span class="badge rounded-pill text-bg-warning">' . $val['status'] . '</span>';
-			}
-			if ($val['status'] == 'pulang awal') {
-				$val['status'] = '<span class="badge rounded-pill text-bg-warning">' . $val['status'] . '</span>';
-			}
+			
 			$no++;
 		}
 					

@@ -67,6 +67,8 @@ phpunit
 backup/*
 public/files/~$Format Data Barang.xlsx
 public/images/presensi/*
+public/images/activity/*
+public/file/*
 
 # Ignore environment and server configuration files
 .env
