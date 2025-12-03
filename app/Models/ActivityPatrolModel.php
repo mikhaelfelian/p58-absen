@@ -136,13 +136,14 @@ class ActivityPatrolModel extends Model
     }
     
     /**
-     * Check if all patrols are completed for user/company today
-     * Returns true if all active patrols have been scanned today
+     * Check if all patrols are completed for user/company
+     * If tgl_masuk is provided, only checks patrols scanned AFTER that time (within current shift)
+     * Otherwise, checks all patrols scanned today
+     * Returns true if all active patrols have been scanned
      */
-    public function areAllPatrolsCompleted($id_user, $id_company)
+    public function areAllPatrolsCompleted($id_user, $id_company, $tgl_masuk = null)
     {
         $db = \Config\Database::connect();
-        $today = date('Y-m-d');
         
         // Get total active patrols for this company
         $patrolModel = new CompanyPatrolModel;
@@ -154,17 +155,34 @@ class ActivityPatrolModel extends Model
             return true;
         }
         
-        // Get unique patrols scanned today
-        $sql = "
-            SELECT DISTINCT ap.id_patrol
-            FROM activity_patrol ap
-            JOIN activity a ON ap.id_activity = a.id_activity
-            WHERE a.id_user = ? 
-            AND a.id_company = ?
-            AND DATE(a.tanggal) = ?
-        ";
+        // Build query based on whether tgl_masuk is provided
+        if ($tgl_masuk) {
+            // Check patrols scanned AFTER shift start time
+            $sql = "
+                SELECT DISTINCT ap.id_patrol
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                WHERE a.id_user = ? 
+                AND a.id_company = ?
+                AND DATE(a.tanggal) >= DATE(?)
+                AND a.tanggal >= ?
+            ";
+            $params = [$id_user, $id_company, $tgl_masuk, $tgl_masuk];
+        } else {
+            // Fallback: Check all patrols scanned today (backward compatibility)
+            $today = date('Y-m-d');
+            $sql = "
+                SELECT DISTINCT ap.id_patrol
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                WHERE a.id_user = ? 
+                AND a.id_company = ?
+                AND DATE(a.tanggal) = ?
+            ";
+            $params = [$id_user, $id_company, $today];
+        }
         
-        $scannedPatrols = $db->query($sql, [$id_user, $id_company, $today])->getResult();
+        $scannedPatrols = $db->query($sql, $params)->getResult();
         $scannedCount = count($scannedPatrols);
         
         // All patrols must be scanned
@@ -207,13 +225,14 @@ class ActivityPatrolModel extends Model
     }
     
     /**
-     * Get list of uncompleted patrols for user/company today
+     * Get list of uncompleted patrols for user/company
+     * If tgl_masuk is provided, only checks patrols scanned AFTER that time (within current shift)
+     * Otherwise, checks all patrols scanned today
      * Returns array of patrol objects that haven't been scanned
      */
-    public function getUncompletedPatrols($id_user, $id_company)
+    public function getUncompletedPatrols($id_user, $id_company, $tgl_masuk = null)
     {
         $db = \Config\Database::connect();
-        $today = date('Y-m-d');
         
         // Get all active patrols for this company
         $patrolModel = new CompanyPatrolModel;
@@ -223,17 +242,34 @@ class ActivityPatrolModel extends Model
             return [];
         }
         
-        // Get scanned patrol IDs today
-        $sql = "
-            SELECT DISTINCT ap.id_patrol
-            FROM activity_patrol ap
-            JOIN activity a ON ap.id_activity = a.id_activity
-            WHERE a.id_user = ? 
-            AND a.id_company = ?
-            AND DATE(a.tanggal) = ?
-        ";
+        // Build query based on whether tgl_masuk is provided
+        if ($tgl_masuk) {
+            // Check patrols scanned AFTER shift start time
+            $sql = "
+                SELECT DISTINCT ap.id_patrol
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                WHERE a.id_user = ? 
+                AND a.id_company = ?
+                AND DATE(a.tanggal) >= DATE(?)
+                AND a.tanggal >= ?
+            ";
+            $params = [$id_user, $id_company, $tgl_masuk, $tgl_masuk];
+        } else {
+            // Fallback: Check all patrols scanned today (backward compatibility)
+            $today = date('Y-m-d');
+            $sql = "
+                SELECT DISTINCT ap.id_patrol
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                WHERE a.id_user = ? 
+                AND a.id_company = ?
+                AND DATE(a.tanggal) = ?
+            ";
+            $params = [$id_user, $id_company, $today];
+        }
         
-        $scannedPatrols = $db->query($sql, [$id_user, $id_company, $today])->getResult();
+        $scannedPatrols = $db->query($sql, $params)->getResult();
         $scannedIds = array_column($scannedPatrols, 'id_patrol');
         
         // Find uncompleted patrols

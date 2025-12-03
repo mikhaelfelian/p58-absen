@@ -65,6 +65,14 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		$activityPatrolModel = new ActivityPatrolModel;
 		$patrol_status = [];
 		
+		// Get current shift's tgl_masuk if user has active shift
+		$lastPresensi = $this->presensiModel->getLastPresensi($id_user);
+		$tgl_masuk = null;
+		if ($lastPresensi && !empty($lastPresensi['tgl_masuk']) && empty($lastPresensi['tgl_keluar'])) {
+			// User has active shift, use its tgl_masuk for patrol validation
+			$tgl_masuk = $lastPresensi['tgl_masuk'];
+		}
+		
 		foreach ($companies as $company) {
 			$company->setting_data = $companyModel->getCompanySetting($company->id_company);
 			
@@ -73,12 +81,12 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 			$isPatrolRequired = ($is_patrol_mode == 'Y' && isset($company->isPatrolRequired) && $company->isPatrolRequired == 1);
 			
 			if ($isPatrolRequired) {
-				// Check if all patrols are completed
-				$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $company->id_company);
+				// Check if all patrols are completed (within current shift if active)
+				$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $company->id_company, $tgl_masuk);
 				$uncompletedPatrols = [];
 				
 				if (!$allCompleted) {
-					$uncompletedPatrols = $activityPatrolModel->getUncompletedPatrols($id_user, $company->id_company);
+					$uncompletedPatrols = $activityPatrolModel->getUncompletedPatrols($id_user, $company->id_company, $tgl_masuk);
 				}
 				
 				$patrol_status[$company->id_company] = [
@@ -149,244 +157,469 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 	
 	public function ajaxSaveData() 
 	{
-		$data = base64_decode($_POST['data']);
-		$data = json_decode($data, true);
-		$setting = $this->data['setting_presensi'];
-		$today = date('Y-m-d');
-		$error = [];
-		
-		// Debug: Log received data
-		log_message('debug', 'Presensi Data: ' . json_encode($data));
-		
-		// Validate company assignment
-		$userCompanyModel = new UserCompanyModel;
-		$id_user = $this->session->get('user')['id_user'];
-		
-		// Try multiple ways to get id_company
-		$id_company = $data['id_company'] ?? $_POST['id_company'] ?? null;
-		
-		// Debug log
-		log_message('debug', 'ID Company from data: ' . ($data['id_company'] ?? 'NULL'));
-		log_message('debug', 'ID Company from POST: ' . ($_POST['id_company'] ?? 'NULL'));
-		log_message('debug', 'ID Company final: ' . ($id_company ?? 'NULL'));
-		
-		$assignment = null;
-		if (!$id_company || $id_company == '' || $id_company == 'null') {
-			$error[] = 'Company harus dipilih. Pastikan Anda berada di lokasi company yang di-assign.';
-		} else {
-			$sqlAssignment = 'SELECT uc.*, 
-									uc.jam_kerja_target,
-									swp.waktu_masuk_awal, swp.waktu_masuk_akhir,
-									swp.waktu_pulang_awal, swp.waktu_pulang_akhir,
-									swp.batas_waktu_masuk, swp.batas_waktu_pulang
-								FROM user_company uc
-								LEFT JOIN setting_waktu_presensi swp 
-									ON uc.id_setting_waktu_presensi = swp.id_setting_waktu_presensi
-								WHERE uc.id_user = ? 
-									AND uc.id_company = ? 
-									AND uc.status = "active"
-									AND (uc.tanggal_mulai IS NULL OR uc.tanggal_mulai <= ?)
-									AND (uc.tanggal_selesai IS NULL OR uc.tanggal_selesai >= ?)
-								LIMIT 1';
-			$assignment = $this->model->db->query($sqlAssignment, [$id_user, $id_company, $today, $today])->getRow();
+		try {
+			// Decode and validate input data
+			if (!isset($_POST['data']) || empty($_POST['data'])) {
+				throw new \Exception('Data presensi tidak ditemukan');
+			}
 			
-			if (!$assignment) {
-				$error[] = 'Anda tidak memiliki akses ke company ini';
+			$data = base64_decode($_POST['data']);
+			$data = json_decode($data, true);
+			
+			if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+				throw new \Exception('Data presensi tidak valid: ' . json_last_error_msg());
+			}
+			
+			// Validate required fields
+			if (!isset($data['jenis_presensi']) || !in_array($data['jenis_presensi'], ['masuk', 'pulang'])) {
+				throw new \Exception('Jenis presensi tidak valid');
+			}
+			
+			$setting = $this->data['setting_presensi'] ?? [];
+			$today = date('Y-m-d');
+			$error = [];
+			
+			// Debug: Log received data
+			log_message('debug', 'Presensi Data: ' . json_encode($data));
+			
+			// Validate user session
+			$userSession = $this->session->get('user');
+			if (!$userSession || !isset($userSession['id_user'])) {
+				throw new \Exception('Session user tidak valid');
+			}
+			
+			$id_user = $userSession['id_user'];
+			
+			// Validate user ID
+			if (empty($id_user) || !is_numeric($id_user)) {
+				throw new \Exception('ID user tidak valid: ' . $id_user);
+			}
+			
+			// Try multiple ways to get id_company
+			$id_company = $data['id_company'] ?? $_POST['id_company'] ?? null;
+			
+			// Debug log
+			log_message('debug', 'ID Company from data: ' . ($data['id_company'] ?? 'NULL'));
+			log_message('debug', 'ID Company from POST: ' . ($_POST['id_company'] ?? 'NULL'));
+			log_message('debug', 'ID Company final: ' . ($id_company ?? 'NULL'));
+			
+			$assignment = null;
+			if (!$id_company || $id_company == '' || $id_company == 'null') {
+				$error[] = 'Company harus dipilih. Pastikan Anda berada di lokasi company yang di-assign.';
 			} else {
-				// Get company location and radius
-				$sql = 'SELECT * FROM company WHERE id_company = ?';
-				$company = $this->model->db->query($sql, [$id_company])->getRow();
-				
-				if (!$company) {
-					$error[] = 'Company tidak ditemukan';
+				// Validate company ID before query
+				if (!is_numeric($id_company)) {
+					$error[] = 'ID company tidak valid';
 				} else {
-					// Load company settings
-					$companyModel = new \App\Models\CompanyModel;
-					$companySetting = $companyModel->getCompanySetting($id_company);
-					$gunakanRadiusLokasi = $companySetting['gunakan_radius_lokasi'] ?? 'Y';
+					$userCompanyModel = new UserCompanyModel;
+					$sqlAssignment = 'SELECT uc.*, 
+											uc.jam_kerja_target,
+											swp.waktu_masuk_awal, swp.waktu_masuk_akhir,
+											swp.waktu_pulang_awal, swp.waktu_pulang_akhir,
+											swp.batas_waktu_masuk, swp.batas_waktu_pulang
+										FROM user_company uc
+										LEFT JOIN setting_waktu_presensi swp 
+											ON uc.id_setting_waktu_presensi = swp.id_setting_waktu_presensi
+										WHERE uc.id_user = ? 
+											AND uc.id_company = ? 
+											AND uc.status = "active"
+											AND (uc.tanggal_mulai IS NULL OR uc.tanggal_mulai <= ?)
+											AND (uc.tanggal_selesai IS NULL OR uc.tanggal_selesai >= ?)
+										LIMIT 1';
+					$assignment = $this->model->db->query($sqlAssignment, [$id_user, $id_company, $today, $today])->getRow();
 					
-					// Only check radius if enabled in company settings
-					if ($gunakanRadiusLokasi === 'Y') {
-						// Check radius based on company location
-						$dist = $this->getDistance(
-							$company->latitude, 
-							$company->longitude, 
-							$data['location']['coords']['latitude'], 
-							$data['location']['coords']['longitude']
-						);
-						
-						// Use radius from company settings if available, otherwise use company table
-						$radius = isset($companySetting['radius_nilai']) ? $companySetting['radius_nilai'] : $company->radius_nilai;
-						$radiusSatuan = isset($companySetting['radius_satuan']) ? $companySetting['radius_satuan'] : $company->radius_satuan;
-						
-						if ($radiusSatuan == 'km') {
-							$radius = $radius * 1000;
-						}
-						$dist = $dist * 1000;
-						
-						if ($radius < $dist) {
-							$error[] = 'Lokasi Anda diluar radius lokasi absen yang diperbolehkan. Radius lokasi absen adalah ' . $radius . ($radiusSatuan == 'km' ? 'km' : 'm') . ' dari ' . $company->nama_company; 
-						}
-					}
-					// If gunakan_radius_lokasi = 'N', skip radius validation
-				}
-			}
-		}
-		
-		if ($setting['gunakan_foto_selfi'] == 'Y') {
-			$image = explode('data:image/jpeg;base64,', $data['foto']);
-			$size= getimagesizefromstring(base64_decode(trim($image[1])));
-			if (!$size) {
-				$error[] = 'Foto tidak valid';
-			}
-		}
-		
-		// Check if patrol is required for pulang
-		if ($data['jenis_presensi'] == 'pulang' && $id_company) {
-			// Get user-company assignment to check isPatrolRequired
-			// Check company patrol mode setting
-			$companyModel = new CompanyModel;
-			$companySetting = $companyModel->getCompanySetting($id_company);
-			$is_patrol_mode = $companySetting['is_patrol_mode'] ?? 'N';
-			
-			// Combined: company patrol mode AND user's patrol requirement
-			$isPatrolRequired = ($is_patrol_mode == 'Y' && $assignment && isset($assignment->isPatrolRequired) && $assignment->isPatrolRequired == 1);
-			
-			if ($isPatrolRequired) {
-				// Check if all patrols are completed
-				$activityPatrolModel = new ActivityPatrolModel;
-				$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $id_company);
-				
-				if (!$allCompleted) {
-					// Get list of uncompleted patrols
-					$uncompletedPatrols = $activityPatrolModel->getUncompletedPatrols($id_user, $id_company);
-					$patrolNames = array_map(function($p) { return $p->nama_patrol; }, $uncompletedPatrols);
-					
-					$error[] = 'Anda belum menyelesaikan semua patrol yang wajib. Patrol yang belum di-scan: ' . implode(', ', $patrolNames) . '. Silakan selesaikan semua patrol terlebih dahulu sebelum melakukan absen pulang.';
-				}
-			}
-		}
-		
-		if ($error) {
-			$result = ['status' => 'error', 'message' => $error];
-		} else {
-			// Use new duration-based methods
-			if ($data['jenis_presensi'] == 'masuk') {
-				// Validate: Check if user already has an active shift (tgl_keluar IS NULL)
-				$last = $this->presensiModel->getLastPresensi($id_user);
-				if ($last && empty($last['tgl_keluar'])) {
-					$result = ['status' => 'error', 'message' => 'Anda sudah melakukan presensi masuk. Silakan lakukan presensi pulang terlebih dahulu.'];
-					echo json_encode($result);
-					return;
-				}
-				
-				// Clock-in: Create new record
-				$insertResult = $this->presensiModel->insertMasuk($id_user, $id_company);
-				
-				if ($insertResult) {
-					// Save photo and location if provided
-					if (isset($data['foto']) && $data['foto']) {
-						$presensiRecord = $this->presensiModel->find($insertResult);
-						if ($presensiRecord) {
-							$nama_file = str_replace(' ', '_', $this->session->get('user')['nama']) . '_' . date('Ymd_His_') . gettimeofday()['usec'] . '.jpeg';
-							$exp = explode(',', $data['foto']);
-							file_put_contents(ROOTPATH . 'public/images/presensi/' . $nama_file, base64_decode($exp[1]));
-							
-							$this->presensiModel->update($insertResult, [
-								'foto' => $nama_file,
-								'latitude' => $data['location']['coords']['latitude'],
-								'longitude' => $data['location']['coords']['longitude']
-							]);
-						}
-					}
-					$result = ['status' => 'ok', 'message' => 'Data berhasil disimpan'];
-					
-					// Kirim email notifikasi setelah presensi masuk berhasil disimpan
-					try {
-						$this->sendPresensiEmail($insertResult, $id_company, 'masuk');
-					} catch (\Throwable $e) {
-						// Jangan ganggu flow utama jika email gagal
-						log_message('error', 'Presensi email (masuk) gagal: ' . $e->getMessage());
-					}
-				} else {
-					$result = ['status' => 'error', 'message' => 'Data gagal disimpan'];
-				}
-			} else if ($data['jenis_presensi'] == 'pulang') {
-				// Validate: Check if user has an active shift (must have masuk first)
-				$last = $this->presensiModel->getLastPresensi($id_user);
-				if (!$last || !empty($last['tgl_keluar'])) {
-					$result = ['status' => 'error', 'message' => 'Anda belum melakukan presensi masuk. Silakan lakukan presensi masuk terlebih dahulu.'];
-					echo json_encode($result);
-					return;
-				}
-				
-				// Clock-out: Update latest clock-in record
-				$jamKerjaTarget = 12; // Default
-				if ($assignment) {
-					if (is_object($assignment)) {
-						$jamKerjaTarget = !empty($assignment->jam_kerja_target) ? intval($assignment->jam_kerja_target) : 12;
-					} else if (is_array($assignment)) {
-						$jamKerjaTarget = !empty($assignment['jam_kerja_target']) ? intval($assignment['jam_kerja_target']) : 12;
-					}
-				}
-				$updateResult = $this->presensiModel->insertPulang($id_user, $jamKerjaTarget);
-				
-				if ($updateResult) {
-					// Save photo and location if provided
-					$latestMasuk = $this->presensiModel
-						->where('id_user', $id_user)
-						->where('tgl_keluar IS NOT NULL')
-						->orderBy('id', 'DESC')
-						->first();
-					
-					// Convert to array if object
-					if ($latestMasuk && is_object($latestMasuk)) {
-						$latestMasuk = (array) $latestMasuk;
-					}
-					
-					if ($latestMasuk && isset($data['foto']) && $data['foto']) {
-						$nama_file = str_replace(' ', '_', $this->session->get('user')['nama']) . '_' . date('Ymd_His_') . gettimeofday()['usec'] . '.jpeg';
-						$exp = explode(',', $data['foto']);
-						file_put_contents(ROOTPATH . 'public/images/presensi/' . $nama_file, base64_decode($exp[1]));
-						
-						$latestMasukId = is_array($latestMasuk) ? $latestMasuk['id'] : $latestMasuk->id;
-						$this->presensiModel->update($latestMasukId, [
-							'foto' => $nama_file,
-							'latitude' => $data['location']['coords']['latitude'],
-							'longitude' => $data['location']['coords']['longitude']
-						]);
-					}
-					
-					// Pastikan kita punya ID presensi terbaru setelah pulang
-					$presensiId = null;
-					if (isset($latestMasukId)) {
-						$presensiId = $latestMasukId;
+					if (!$assignment) {
+						$error[] = 'Anda tidak memiliki akses ke company ini';
 					} else {
-						// Fallback: ambil last presensi dari model
-						$lastPresensi = $this->presensiModel->getLastPresensi($id_user);
-						if ($lastPresensi && isset($lastPresensi['id'])) {
-							$presensiId = $lastPresensi['id'];
+						// Get company location and radius
+						$sql = 'SELECT * FROM company WHERE id_company = ?';
+						$company = $this->model->db->query($sql, [$id_company])->getRow();
+						
+						if (!$company) {
+							$error[] = 'Company tidak ditemukan';
+						} else {
+							// Load company settings
+							$companyModel = new \App\Models\CompanyModel;
+							$companySetting = $companyModel->getCompanySetting($id_company);
+							$gunakanRadiusLokasi = $companySetting['gunakan_radius_lokasi'] ?? 'Y';
+							
+							// Only check radius if enabled in company settings
+							if ($gunakanRadiusLokasi === 'Y') {
+								// Validate location data exists before checking radius
+								if (!isset($data['location']['coords']['latitude']) || !isset($data['location']['coords']['longitude'])) {
+									$error[] = 'Data lokasi tidak ditemukan';
+								} else {
+									// Check radius based on company location
+									$dist = $this->getDistance(
+										$company->latitude, 
+										$company->longitude, 
+										$data['location']['coords']['latitude'], 
+										$data['location']['coords']['longitude']
+									);
+									
+									// Use radius from company settings if available, otherwise use company table
+									$radius = isset($companySetting['radius_nilai']) ? $companySetting['radius_nilai'] : $company->radius_nilai;
+									$radiusSatuan = isset($companySetting['radius_satuan']) ? $companySetting['radius_satuan'] : $company->radius_satuan;
+									
+									if ($radiusSatuan == 'km') {
+										$radius = $radius * 1000;
+									}
+									$dist = $dist * 1000;
+									
+									if ($radius < $dist) {
+										$error[] = 'Lokasi Anda diluar radius lokasi absen yang diperbolehkan. Radius lokasi absen adalah ' . $radius . ($radiusSatuan == 'km' ? 'km' : 'm') . ' dari ' . $company->nama_company; 
+									}
+								}
+							}
+							// If gunakan_radius_lokasi = 'N', skip radius validation
 						}
 					}
-					
-					$result = ['status' => 'ok', 'message' => 'Data berhasil disimpan'];
-					
-					// Kirim email notifikasi setelah presensi pulang berhasil disimpan
-					if ($presensiId) {
-						try {
-							$this->sendPresensiEmail($presensiId, $id_company, 'pulang');
-						} catch (\Throwable $e) {
-							log_message('error', 'Presensi email (pulang) gagal: ' . $e->getMessage());
+				}
+			}
+			
+			// Validate photo if required
+			if (isset($setting['gunakan_foto_selfi']) && $setting['gunakan_foto_selfi'] == 'Y') {
+				if (!isset($data['foto']) || empty($data['foto'])) {
+					$error[] = 'Foto wajib diisi';
+				} else {
+					$image = explode('data:image/jpeg;base64,', $data['foto']);
+					if (!isset($image[1]) || empty($image[1])) {
+						$error[] = 'Format foto tidak valid';
+					} else {
+						$size = getimagesizefromstring(base64_decode(trim($image[1])));
+						if (!$size) {
+							$error[] = 'Foto tidak valid';
 						}
+					}
+				}
+			}
+			
+			// Check if patrol is required for pulang
+			if ($data['jenis_presensi'] == 'pulang' && $id_company) {
+				// Get current shift's tgl_masuk to check patrols done AFTER shift start
+				$lastPresensi = $this->presensiModel->getLastPresensi($id_user);
+				$tgl_masuk = null;
+				if ($lastPresensi && !empty($lastPresensi['tgl_masuk']) && empty($lastPresensi['tgl_keluar'])) {
+					// User has active shift, use its tgl_masuk
+					$tgl_masuk = $lastPresensi['tgl_masuk'];
+				}
+				
+				// Get user-company assignment to check isPatrolRequired
+				// Check company patrol mode setting
+				if ($assignment) {
+					$companyModel = new CompanyModel;
+					$companySetting = $companyModel->getCompanySetting($id_company);
+					$is_patrol_mode = $companySetting['is_patrol_mode'] ?? 'N';
+					
+					// Combined: company patrol mode AND user's patrol requirement
+					$isPatrolRequired = ($is_patrol_mode == 'Y' && isset($assignment->isPatrolRequired) && $assignment->isPatrolRequired == 1);
+					
+					if ($isPatrolRequired) {
+						// Check if all patrols are completed (only patrols done AFTER shift start)
+						$activityPatrolModel = new ActivityPatrolModel;
+						$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $id_company, $tgl_masuk);
+						
+						if (!$allCompleted) {
+							// Get list of uncompleted patrols (only patrols not scanned AFTER shift start)
+							$uncompletedPatrols = $activityPatrolModel->getUncompletedPatrols($id_user, $id_company, $tgl_masuk);
+							$patrolNames = array_map(function($p) { 
+								// Handle both object and array formats
+								if (is_array($p)) {
+									return $p['nama_patrol'] ?? 'Unknown';
+								}
+								return $p->nama_patrol ?? 'Unknown';
+							}, $uncompletedPatrols);
+							
+							$error[] = 'Anda belum menyelesaikan semua patrol yang wajib. Patrol yang belum di-scan: ' . implode(', ', $patrolNames) . '. Silakan selesaikan semua patrol terlebih dahulu sebelum melakukan absen pulang.';
+						}
+					}
+				}
+			}
+			
+			if ($error) {
+				$result = ['status' => 'error', 'message' => $error];
+			} else {
+				// Use new duration-based methods
+				if ($data['jenis_presensi'] == 'masuk') {
+					// Use transaction with row lock to prevent race conditions
+					$db = \Config\Database::connect();
+					$db->transStart();
+					
+					try {
+						// Validate: Check if user already has an active shift (tgl_keluar IS NULL)
+						// Use row lock to prevent concurrent requests from both passing the check
+						$last = $this->presensiModel->getLastPresensiWithLock($id_user);
+						if ($last && empty($last['tgl_keluar'])) {
+							$db->transRollback();
+							$result = ['status' => 'error', 'message' => 'Anda sudah melakukan presensi masuk. Silakan lakukan presensi pulang terlebih dahulu.'];
+							echo json_encode($result);
+							return;
+						}
+						
+						// Clock-in: Create new record
+						$insertResult = $this->presensiModel->insertMasuk($id_user, $id_company);
+						
+						if (!$insertResult || !is_numeric($insertResult)) {
+							$db->transRollback();
+							log_message('error', 'Presensi masuk: Insert gagal. User ID: ' . $id_user . ', Company ID: ' . $id_company);
+							$result = ['status' => 'error', 'message' => 'Data gagal disimpan. Silakan coba lagi.'];
+							echo json_encode($result);
+							return;
+						}
+						
+						// Double-check: Verify record was created before updating
+						$presensiRecord = $this->presensiModel->find($insertResult);
+						if (!$presensiRecord) {
+							$db->transRollback();
+							log_message('error', 'Presensi masuk: Record tidak ditemukan setelah insert. Insert ID: ' . $insertResult);
+							$result = ['status' => 'error', 'message' => 'Data gagal disimpan. Record tidak ditemukan.'];
+							echo json_encode($result);
+							return;
+						}
+						
+						// Save photo and location if provided
+						if (isset($data['foto']) && $data['foto'] && isset($data['location']['coords'])) {
+							try {
+								$nama_file = str_replace(' ', '_', $userSession['nama']) . '_' . date('Ymd_His_') . gettimeofday()['usec'] . '.jpeg';
+								$exp = explode(',', $data['foto']);
+								
+								if (isset($exp[1]) && !empty($exp[1])) {
+									$imageData = base64_decode($exp[1]);
+									$uploadPath = ROOTPATH . 'public/images/presensi/';
+									
+									// Ensure directory exists
+									if (!is_dir($uploadPath)) {
+										mkdir($uploadPath, 0755, true);
+									}
+									
+									$fileSaved = file_put_contents($uploadPath . $nama_file, $imageData);
+									
+									if ($fileSaved === false) {
+										log_message('error', 'Presensi masuk: Gagal menyimpan foto. Path: ' . $uploadPath . $nama_file);
+									} else {
+										// Double-check record still exists before update
+										$presensiRecordCheck = $this->presensiModel->find($insertResult);
+										if ($presensiRecordCheck) {
+											$updateData = [
+												'foto' => $nama_file,
+												'latitude' => $data['location']['coords']['latitude'],
+												'longitude' => $data['location']['coords']['longitude']
+											];
+											
+											$updateResult = $this->presensiModel->update($insertResult, $updateData);
+											if (!$updateResult) {
+												log_message('error', 'Presensi masuk: Gagal update foto/lokasi. Record ID: ' . $insertResult);
+											}
+										} else {
+											log_message('error', 'Presensi masuk: Record tidak ditemukan saat update foto. Record ID: ' . $insertResult);
+										}
+									}
+								}
+							} catch (\Exception $e) {
+								log_message('error', 'Presensi masuk: Error saat menyimpan foto/lokasi: ' . $e->getMessage());
+								// Don't fail the entire operation if photo save fails
+							}
+						}
+						
+						$db->transComplete();
+						
+						if ($db->transStatus() === false) {
+							log_message('error', 'Presensi masuk: Transaction gagal. User ID: ' . $id_user);
+							$result = ['status' => 'error', 'message' => 'Data gagal disimpan. Silakan coba lagi.'];
+						} else {
+							$result = ['status' => 'ok', 'message' => 'Data berhasil disimpan'];
+							
+							// Kirim email notifikasi setelah presensi masuk berhasil disimpan
+							try {
+								$this->sendPresensiEmail($insertResult, $id_company, 'masuk');
+							} catch (\Throwable $e) {
+								// Jangan ganggu flow utama jika email gagal
+								log_message('error', 'Presensi email (masuk) gagal: ' . $e->getMessage());
+							}
+						}
+					} catch (\Exception $e) {
+						$db->transRollback();
+						log_message('error', 'Presensi masuk error: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
+						$result = ['status' => 'error', 'message' => 'Terjadi kesalahan saat menyimpan data presensi masuk'];
+					}
+				} else if ($data['jenis_presensi'] == 'pulang') {
+					// Use transaction for pulang as well
+					$db = \Config\Database::connect();
+					$db->transStart();
+					
+					try {
+						// Validate: Check if user has an active shift (must have masuk first)
+						$last = $this->presensiModel->getLastPresensi($id_user);
+						
+						if (!$last) {
+							$db->transRollback();
+							log_message('error', 'Presensi pulang: Tidak ada record presensi untuk user ID: ' . $id_user);
+							$result = ['status' => 'error', 'message' => 'Anda belum melakukan presensi masuk. Silakan lakukan presensi masuk terlebih dahulu.'];
+							echo json_encode($result);
+							return;
+						}
+						
+						// Convert to array if object for consistent access
+						if (is_object($last)) {
+							$last = (array) $last;
+						}
+						
+						if (!isset($last['tgl_keluar']) || !empty($last['tgl_keluar'])) {
+							$db->transRollback();
+							log_message('error', 'Presensi pulang: User sudah melakukan pulang atau tidak ada shift aktif. User ID: ' . $id_user);
+							$result = ['status' => 'error', 'message' => 'Anda belum melakukan presensi masuk. Silakan lakukan presensi masuk terlebih dahulu.'];
+							echo json_encode($result);
+							return;
+						}
+						
+						// Validate assignment exists before accessing properties
+						if (!$assignment) {
+							$db->transRollback();
+							log_message('error', 'Presensi pulang: Assignment tidak ditemukan. User ID: ' . $id_user . ', Company ID: ' . $id_company);
+							$result = ['status' => 'error', 'message' => 'Assignment tidak ditemukan'];
+							echo json_encode($result);
+							return;
+						}
+						
+						// Clock-out: Update latest clock-in record
+						$jamKerjaTarget = 12; // Default
+						if (is_object($assignment)) {
+							$jamKerjaTarget = !empty($assignment->jam_kerja_target) ? intval($assignment->jam_kerja_target) : 12;
+						} else if (is_array($assignment)) {
+							$jamKerjaTarget = !empty($assignment['jam_kerja_target']) ? intval($assignment['jam_kerja_target']) : 12;
+						}
+						
+						$updateResult = $this->presensiModel->insertPulang($id_user, $jamKerjaTarget);
+						
+						if (!$updateResult) {
+							$db->transRollback();
+							log_message('error', 'Presensi pulang: Update gagal. User ID: ' . $id_user);
+							$result = ['status' => 'error', 'message' => 'Gagal menyimpan data presensi pulang. Silakan coba lagi.'];
+							echo json_encode($result);
+							return;
+						}
+						
+						// Double-check: Verify record was updated before proceeding
+						$latestMasuk = $this->presensiModel
+							->where('id_user', $id_user)
+							->where('tgl_keluar IS NOT NULL')
+							->orderBy('id', 'DESC')
+							->first();
+						
+						if (!$latestMasuk) {
+							$db->transRollback();
+							log_message('error', 'Presensi pulang: Record tidak ditemukan setelah update. User ID: ' . $id_user);
+							$result = ['status' => 'error', 'message' => 'Data gagal disimpan. Record tidak ditemukan.'];
+							echo json_encode($result);
+							return;
+						}
+						
+						// Convert to array if object
+						if (is_object($latestMasuk)) {
+							$latestMasuk = (array) $latestMasuk;
+						}
+						
+						// Validate latestMasuk has ID
+						if (!isset($latestMasuk['id']) || empty($latestMasuk['id'])) {
+							$db->transRollback();
+							log_message('error', 'Presensi pulang: Record ID tidak valid. User ID: ' . $id_user);
+							$result = ['status' => 'error', 'message' => 'Data gagal disimpan. ID record tidak valid.'];
+							echo json_encode($result);
+							return;
+						}
+						
+						$latestMasukId = $latestMasuk['id'];
+						
+						// Save photo and location if provided
+						if (isset($data['foto']) && $data['foto'] && isset($data['location']['coords'])) {
+							try {
+								$nama_file = str_replace(' ', '_', $userSession['nama']) . '_' . date('Ymd_His_') . gettimeofday()['usec'] . '.jpeg';
+								$exp = explode(',', $data['foto']);
+								
+								if (isset($exp[1]) && !empty($exp[1])) {
+									$imageData = base64_decode($exp[1]);
+									$uploadPath = ROOTPATH . 'public/images/presensi/';
+									
+									// Ensure directory exists
+									if (!is_dir($uploadPath)) {
+										mkdir($uploadPath, 0755, true);
+									}
+									
+									$fileSaved = file_put_contents($uploadPath . $nama_file, $imageData);
+									
+									if ($fileSaved === false) {
+										log_message('error', 'Presensi pulang: Gagal menyimpan foto. Path: ' . $uploadPath . $nama_file);
+									} else {
+										// Double-check record still exists before update
+										$presensiRecordCheck = $this->presensiModel->find($latestMasukId);
+										if ($presensiRecordCheck) {
+											$updateData = [
+												'foto' => $nama_file,
+												'latitude' => $data['location']['coords']['latitude'],
+												'longitude' => $data['location']['coords']['longitude']
+											];
+											
+											$photoUpdateResult = $this->presensiModel->update($latestMasukId, $updateData);
+											if (!$photoUpdateResult) {
+												log_message('error', 'Presensi pulang: Gagal update foto/lokasi. Record ID: ' . $latestMasukId);
+											}
+										} else {
+											log_message('error', 'Presensi pulang: Record tidak ditemukan saat update foto. Record ID: ' . $latestMasukId);
+										}
+									}
+								}
+							} catch (\Exception $e) {
+								log_message('error', 'Presensi pulang: Error saat menyimpan foto/lokasi: ' . $e->getMessage());
+								// Don't fail the entire operation if photo save fails
+							}
+						}
+						
+						$db->transComplete();
+						
+						if ($db->transStatus() === false) {
+							log_message('error', 'Presensi pulang: Transaction gagal. User ID: ' . $id_user);
+							$result = ['status' => 'error', 'message' => 'Data gagal disimpan. Silakan coba lagi.'];
+						} else {
+							// Pastikan kita punya ID presensi terbaru setelah pulang
+							$presensiId = $latestMasukId;
+							
+							// Double-check presensiId is valid
+							if (!$presensiId || !is_numeric($presensiId)) {
+								// Fallback: ambil last presensi dari model
+								$lastPresensiCheck = $this->presensiModel->getLastPresensi($id_user);
+								if ($lastPresensiCheck && isset($lastPresensiCheck['id'])) {
+									$presensiId = $lastPresensiCheck['id'];
+								}
+							}
+							
+							$result = ['status' => 'ok', 'message' => 'Data berhasil disimpan'];
+							
+							// Kirim email notifikasi setelah presensi pulang berhasil disimpan
+							if ($presensiId && is_numeric($presensiId)) {
+								try {
+									$this->sendPresensiEmail($presensiId, $id_company, 'pulang');
+								} catch (\Throwable $e) {
+									log_message('error', 'Presensi email (pulang) gagal: ' . $e->getMessage());
+								}
+							}
+						}
+					} catch (\Exception $e) {
+						$db->transRollback();
+						log_message('error', 'Presensi pulang error: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
+						$result = ['status' => 'error', 'message' => 'Terjadi kesalahan saat menyimpan data presensi pulang'];
 					}
 				} else {
-					$result = ['status' => 'error', 'message' => 'Anda belum melakukan presensi masuk. Silakan lakukan presensi masuk terlebih dahulu.'];
+					$result = ['status' => 'error', 'message' => 'Jenis presensi tidak valid'];
 				}
-			} else {
-				$result = ['status' => 'error', 'message' => 'Jenis presensi tidak valid'];
 			}
+			
+			echo json_encode($result);
+			
+		} catch (\Exception $e) {
+			log_message('error', 'ajaxSaveData error: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
+			$result = ['status' => 'error', 'message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()];
+			echo json_encode($result);
 		}
-		echo json_encode($result);
 	}
 	
 	/**

@@ -456,6 +456,7 @@ $(document).ready(function() {
 	$('body').undelegate('#presensi-pulang', 'click');
 	
 	btn_clicked = '';
+	var isSubmittingPresensi = false; // Global flag to prevent double submission
 	$('body').delegate('#presensi-pulang, #presensi-masuk', 'click', function(e) {
 		$this = $(this);
 		e.preventDefault();
@@ -1037,11 +1038,28 @@ $(document).ready(function() {
 
 	function saveData(data)
 	{
+		// Prevent double submission
+		if (isSubmittingPresensi) {
+			console.log('Presensi submission already in progress, ignoring duplicate request');
+			return;
+		}
+		
+		// Set flag to prevent multiple submissions
+		isSubmittingPresensi = true;
+		
+		// Disable submit button if it exists
+		if ($('#btn-submit-presensi').length) {
+			$('#btn-submit-presensi').prop('disabled', true);
+		}
+		
 		$.ajax({
 			url: base_url + 'mobile-presensi-home/ajaxSaveData',
 			type: 'post',
 			data: 'data=' + btoa(JSON.stringify(data)),
 			success: function(data) {
+				// Reset flag on success
+				isSubmittingPresensi = false;
+				
 				data = JSON.parse(data);
 				if (data.status == 'ok') 
 				{
@@ -1094,6 +1112,9 @@ $(document).ready(function() {
 				}
 			},
 			error: function (xhr) {
+				// Reset flag on error
+				isSubmittingPresensi = false;
+				
 				if ($('#btn-submit-presensi').length) {
 					$bootbox_presensi.find('button').prop('disabled', false);
 					$bootbox_presensi.find('.spinner-border').remove();

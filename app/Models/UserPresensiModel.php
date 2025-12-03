@@ -32,6 +32,20 @@ class UserPresensiModel extends Model
         return $result;
     }
 
+    // get last presensi with row lock (FOR UPDATE) - prevents race conditions
+    public function getLastPresensiWithLock($idUser)
+    {
+        $db = \Config\Database::connect();
+        $sql = "SELECT * FROM {$this->table} 
+                WHERE id_user = ? 
+                ORDER BY id DESC 
+                LIMIT 1 
+                FOR UPDATE";
+        $result = $db->query($sql, [$idUser])->getRowArray();
+        
+        return $result;
+    }
+
     // get history
     public function getHistory($idUser)
     {
