@@ -207,5 +207,71 @@ class ActivityModel extends \App\Models\BaseModel
 		
 		return ['data' => $data, 'total_filtered' => $total_filtered];
 	}
+	
+	/**
+	 * Get all activities with patrol scans for a presensi shift
+	 * Returns activities that have patrol scans during the shift period
+	 * 
+	 * @param int $id_user_presensi The presensi ID
+	 * @param string $tgl_masuk Shift start datetime
+	 * @param string $tgl_keluar Shift end datetime
+	 * @return array Array of activities with patrol information
+	 */
+	public function getActivitiesWithPatrolsByPresensi($id_user_presensi, $tgl_masuk, $tgl_keluar)
+	{
+		$db = \Config\Database::connect();
+		
+		// Get user_id from presensi
+		$presensi = $db->table('user_presensi')
+			->where('id', $id_user_presensi)
+			->get()
+			->getRowArray();
+		
+		if (!$presensi) {
+			return [];
+		}
+		
+		$id_user = $presensi['id_user'] ?? null;
+		$id_company = $presensi['id_company'] ?? null;
+		
+		if (!$id_user || !$id_company) {
+			return [];
+		}
+		
+		// Query activities with patrol scans
+		// Include activities where:
+		// 1. id_user_presensi matches the shift ID, OR
+		// 2. id_user_presensi IS NULL but activity was created during shift timeframe
+		$sql = "
+			SELECT DISTINCT
+				a.id_activity,
+				a.judul_activity,
+				a.deskripsi_activity,
+				a.tanggal,
+				a.waktu,
+				a.latitude,
+				a.longitude,
+				a.foto_activity,
+				cp.nama_patrol,
+				ap.scan_time,
+				ap.barcode_scanned
+			FROM activity a
+			INNER JOIN activity_patrol ap ON a.id_activity = ap.id_activity
+			INNER JOIN company_patrol cp ON ap.id_patrol = cp.id_patrol
+			WHERE a.id_user = ?
+			AND a.id_company = ?
+			AND (
+				(a.id_user_presensi = ?)
+				OR
+				(a.id_user_presensi IS NULL AND DATE(a.tanggal) >= DATE(?) AND TIMESTAMP(a.tanggal, a.waktu) >= ? AND TIMESTAMP(a.tanggal, a.waktu) <= ?)
+			)
+			ORDER BY a.tanggal ASC, a.waktu ASC
+		";
+		
+		$query = $db->query($sql, [$id_user, $id_company, $id_user_presensi, $tgl_masuk, $tgl_masuk, $tgl_keluar]);
+		$results = $query->getResultArray();
+		
+		return $results;
+	}
 }
 

@@ -93,9 +93,10 @@ class UserPresensiModel extends Model
         $isValid = ($durasi >= intval($jamKerjaTarget)) ? 1 : 0;
         
         // Update the record
+        // Store duration as integer hours (round to nearest hour)
         $updateData = [
             'tgl_keluar' => date('Y-m-d H:i:s'),
-            'durasi' => $durasi,
+            'durasi' => (int)round($durasi),
             'is_valid' => $isValid
         ];
         

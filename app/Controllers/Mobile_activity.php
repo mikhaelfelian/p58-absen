@@ -11,6 +11,7 @@ use App\Models\ActivityModel;
 use App\Models\UserCompanyModel;
 use App\Models\CompanyPatrolModel;
 use App\Models\ActivityPatrolModel;
+use App\Models\UserPresensiModel;
 
 class Mobile_activity extends BaseController
 {
@@ -145,6 +146,20 @@ class Mobile_activity extends BaseController
 			$error[] = 'Anda tidak memiliki akses ke company ini';
 		}
 		
+		// Validate active shift - user must have an active presensi (masuk) to add activity
+		$id_user = $this->session->get('user')['id_user'];
+		$presensiModel = new UserPresensiModel;
+		$lastPresensi = $presensiModel->getLastPresensi($id_user);
+		
+		$id_user_presensi = null;
+		if ($lastPresensi && !empty($lastPresensi['tgl_masuk']) && empty($lastPresensi['tgl_keluar'])) {
+			// User has active shift, use its ID
+			$id_user_presensi = $lastPresensi['id'];
+		} else {
+			// No active shift found
+			$error[] = 'Anda belum absen masuk, tidak bisa menambah aktifitas';
+		}
+		
 		// Validate required fields
 		if (empty($data_array['judul_activity'])) {
 			$error[] = 'Judul activity harus diisi';
@@ -237,7 +252,7 @@ class Mobile_activity extends BaseController
 		$activity_data = [
 			'id_user' => $this->session->get('user')['id_user'],
 			'id_company' => $data_array['id_company'],
-			'id_user_presensi' => $data_array['id_user_presensi'] ?? null,
+			'id_user_presensi' => $id_user_presensi,
 			'tanggal' => date('Y-m-d'),
 			'waktu' => date('H:i:s'),
 			'judul_activity' => $data_array['judul_activity'],
@@ -291,7 +306,16 @@ class Mobile_activity extends BaseController
 		
 		$patrolModel = new CompanyPatrolModel;
 		$activityPatrolModel = new ActivityPatrolModel;
+		$presensiModel = new UserPresensiModel;
 		$id_user = $this->session->get('user')['id_user'];
+		
+		// Get active shift's tgl_masuk if user has active shift
+		$lastPresensi = $presensiModel->getLastPresensi($id_user);
+		$tgl_masuk = null;
+		if ($lastPresensi && !empty($lastPresensi['tgl_masuk']) && empty($lastPresensi['tgl_keluar'])) {
+			// User has active shift, use its tgl_masuk for patrol validation
+			$tgl_masuk = $lastPresensi['tgl_masuk'];
+		}
 		
 		$patrols = $patrolModel->getPatrolByCompany($company_id);
 		
@@ -299,8 +323,8 @@ class Mobile_activity extends BaseController
 		$lastScanned = $activityPatrolModel->getLastScannedPatrolToday($id_user, $company_id);
 		$lastScanned = $this->normalizePatrolRecord($lastScanned);
 		
-		// Get all scanned patrols today with their scan times (always fresh from database)
-		$scannedPatrolsToday = $activityPatrolModel->getScannedPatrolsToday($id_user, $company_id);
+		// Get all scanned patrols during active shift (or today if no active shift) with their scan times
+		$scannedPatrolsToday = $activityPatrolModel->getScannedPatrolsToday($id_user, $company_id, $tgl_masuk);
 		
 		$nextPatrol = null;
 		

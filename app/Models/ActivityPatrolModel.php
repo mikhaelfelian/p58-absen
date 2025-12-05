@@ -190,25 +190,44 @@ class ActivityPatrolModel extends Model
     }
     
     /**
-     * Get all scanned patrols for user/company today
+     * Get all scanned patrols for user/company during active shift or today
      * Returns array of patrol IDs with their scan times
+     * If $tgl_masuk is provided, returns patrols scanned since shift start
+     * Otherwise, returns patrols scanned today (backward compatibility)
      */
-    public function getScannedPatrolsToday($id_user, $id_company)
+    public function getScannedPatrolsToday($id_user, $id_company, $tgl_masuk = null)
     {
         $db = \Config\Database::connect();
-        $today = date('Y-m-d');
         
-        $sql = "
-            SELECT ap.id_patrol, MAX(ap.scan_time) as scan_time
-            FROM activity_patrol ap
-            JOIN activity a ON ap.id_activity = a.id_activity
-            WHERE a.id_user = ? 
-            AND a.id_company = ?
-            AND DATE(a.tanggal) = ?
-            GROUP BY ap.id_patrol
-        ";
+        if ($tgl_masuk) {
+            // Active shift: Get patrols scanned since shift start
+            $sql = "
+                SELECT ap.id_patrol, MAX(ap.scan_time) as scan_time
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                WHERE a.id_user = ? 
+                AND a.id_company = ?
+                AND DATE(a.tanggal) >= DATE(?)
+                AND TIMESTAMP(a.tanggal, a.waktu) >= ?
+                GROUP BY ap.id_patrol
+            ";
+            $params = [$id_user, $id_company, $tgl_masuk, $tgl_masuk];
+        } else {
+            // Fallback: Get patrols scanned today (backward compatibility)
+            $today = date('Y-m-d');
+            $sql = "
+                SELECT ap.id_patrol, MAX(ap.scan_time) as scan_time
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                WHERE a.id_user = ? 
+                AND a.id_company = ?
+                AND DATE(a.tanggal) = ?
+                GROUP BY ap.id_patrol
+            ";
+            $params = [$id_user, $id_company, $today];
+        }
         
-        $query = $db->query($sql, [$id_user, $id_company, $today]);
+        $query = $db->query($sql, $params);
         $results = $query->getResult();
         
         // Convert to array format: [id_patrol => scan_time]
@@ -284,5 +303,261 @@ class ActivityPatrolModel extends Model
         }
         
         return $uncompleted;
+    }
+    
+    /**
+     * Get patrol progress by id_user_presensi
+     * Returns total, completed count, and percentage
+     * For active shifts (tgl_masuk provided), also counts patrols from activities with NULL id_user_presensi created after shift start
+     */
+    public function getPatrolProgressByPresensi($id_user_presensi, $id_company, $tgl_masuk = null, $id_user = null)
+    {
+        $db = \Config\Database::connect();
+        
+        // Get total required patrols for this company
+        $patrolModel = new CompanyPatrolModel;
+        $allPatrols = $patrolModel->getPatrolByCompany($id_company);
+        $totalPatrols = count($allPatrols);
+        
+        if ($totalPatrols == 0) {
+            return [
+                'total' => 0,
+                'completed' => 0,
+                'percentage' => 100
+            ];
+        }
+        
+        // Get user_id from presensi if not provided
+        if (!$id_user && $id_user_presensi) {
+            $presensi = $db->table('user_presensi')->where('id', $id_user_presensi)->get()->getRowArray();
+            $id_user = $presensi['id_user'] ?? null;
+        }
+        
+        // Build query based on whether tgl_masuk is provided (active shift)
+        if ($tgl_masuk && $id_user) {
+            // Active shift: Count patrols where id_user_presensi matches OR (id_user_presensi IS NULL AND created after shift start)
+            $sql = "
+                SELECT DISTINCT ap.id_patrol
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                LEFT JOIN user_presensi up ON a.id_user_presensi = up.id
+                WHERE a.id_company = ?
+                AND a.id_user = ?
+                AND (
+                    (a.id_user_presensi = ? AND up.id IS NOT NULL AND up.tgl_keluar IS NULL)
+                    OR
+                    (a.id_user_presensi IS NULL AND DATE(a.tanggal) >= DATE(?) AND TIMESTAMP(a.tanggal, a.waktu) >= ?)
+                )
+            ";
+            $params = [$id_company, $id_user, $id_user_presensi, $tgl_masuk, $tgl_masuk];
+        } else {
+            // Completed shift: Only count patrols with matching id_user_presensi
+            $sql = "
+                SELECT DISTINCT ap.id_patrol
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                JOIN user_presensi up ON a.id_user_presensi = up.id
+                WHERE a.id_user_presensi = ?
+                AND a.id_user_presensi IS NOT NULL
+                AND a.id_company = ?
+                AND up.tgl_keluar IS NULL
+            ";
+            $params = [$id_user_presensi, $id_company];
+        }
+        
+        $scannedPatrols = $db->query($sql, $params)->getResult();
+        $completedCount = count($scannedPatrols);
+        
+        $percentage = $totalPatrols > 0 ? round(($completedCount / $totalPatrols) * 100) : 0;
+        
+        return [
+            'total' => $totalPatrols,
+            'completed' => $completedCount,
+            'percentage' => $percentage
+        ];
+    }
+    
+    /**
+     * Get last scanned patrol data by id_user_presensi
+     * Returns patrol data with nama_patrol, urutan, scan_time
+     * For active shifts (tgl_masuk provided), also includes patrols from activities with NULL id_user_presensi created after shift start
+     */
+    public function getLastPatrolDataByPresensi($id_user_presensi, $tgl_masuk = null, $id_user = null, $id_company = null)
+    {
+        $db = \Config\Database::connect();
+        
+        // Get user_id and id_company from presensi if not provided
+        if ((!$id_user || !$id_company) && $id_user_presensi) {
+            $presensi = $db->table('user_presensi')->where('id', $id_user_presensi)->get()->getRowArray();
+            if (!$id_user) $id_user = $presensi['id_user'] ?? null;
+            if (!$id_company) $id_company = $presensi['id_company'] ?? null;
+        }
+        
+        // Check if urutan column exists
+        $fields = $db->getFieldData('company_patrol');
+        $hasUrutan = false;
+        foreach ($fields as $field) {
+            if ($field->name === 'urutan') {
+                $hasUrutan = true;
+                break;
+            }
+        }
+        
+        // Build query based on whether tgl_masuk is provided (active shift)
+        if ($tgl_masuk && $id_user && $id_company) {
+            // Active shift: Include patrols where id_user_presensi matches OR (id_user_presensi IS NULL AND created after shift start)
+            if ($hasUrutan) {
+                $sql = "
+                    SELECT ap.*, cp.urutan, cp.nama_patrol, cp.id_patrol
+                    FROM activity_patrol ap
+                    JOIN activity a ON ap.id_activity = a.id_activity
+                    JOIN company_patrol cp ON ap.id_patrol = cp.id_patrol
+                    LEFT JOIN user_presensi up ON a.id_user_presensi = up.id
+                    WHERE a.id_company = ?
+                    AND a.id_user = ?
+                    AND (
+                        (a.id_user_presensi = ? AND up.id IS NOT NULL AND up.tgl_keluar IS NULL)
+                        OR
+                        (a.id_user_presensi IS NULL AND DATE(a.tanggal) >= DATE(?) AND TIMESTAMP(a.tanggal, a.waktu) >= ?)
+                    )
+                    ORDER BY cp.urutan DESC, ap.scan_time DESC
+                    LIMIT 1
+                ";
+            } else {
+                $sql = "
+                    SELECT ap.*, cp.id_patrol, cp.nama_patrol
+                    FROM activity_patrol ap
+                    JOIN activity a ON ap.id_activity = a.id_activity
+                    JOIN company_patrol cp ON ap.id_patrol = cp.id_patrol
+                    LEFT JOIN user_presensi up ON a.id_user_presensi = up.id
+                    WHERE a.id_company = ?
+                    AND a.id_user = ?
+                    AND (
+                        (a.id_user_presensi = ? AND up.id IS NOT NULL AND up.tgl_keluar IS NULL)
+                        OR
+                        (a.id_user_presensi IS NULL AND DATE(a.tanggal) >= DATE(?) AND TIMESTAMP(a.tanggal, a.waktu) >= ?)
+                    )
+                    ORDER BY cp.id_patrol DESC, ap.scan_time DESC
+                    LIMIT 1
+                ";
+            }
+            $params = [$id_company, $id_user, $id_user_presensi, $tgl_masuk, $tgl_masuk];
+        } else {
+            // Completed shift: Only count patrols with matching id_user_presensi
+            if ($hasUrutan) {
+                $sql = "
+                    SELECT ap.*, cp.urutan, cp.nama_patrol, cp.id_patrol
+                    FROM activity_patrol ap
+                    JOIN activity a ON ap.id_activity = a.id_activity
+                    JOIN company_patrol cp ON ap.id_patrol = cp.id_patrol
+                    JOIN user_presensi up ON a.id_user_presensi = up.id
+                    WHERE a.id_user_presensi = ?
+                    AND a.id_user_presensi IS NOT NULL
+                    AND up.tgl_keluar IS NULL
+                    ORDER BY cp.urutan DESC, ap.scan_time DESC
+                    LIMIT 1
+                ";
+            } else {
+                $sql = "
+                    SELECT ap.*, cp.id_patrol, cp.nama_patrol
+                    FROM activity_patrol ap
+                    JOIN activity a ON ap.id_activity = a.id_activity
+                    JOIN company_patrol cp ON ap.id_patrol = cp.id_patrol
+                    JOIN user_presensi up ON a.id_user_presensi = up.id
+                    WHERE a.id_user_presensi = ?
+                    AND a.id_user_presensi IS NOT NULL
+                    AND up.tgl_keluar IS NULL
+                    ORDER BY cp.id_patrol DESC, ap.scan_time DESC
+                    LIMIT 1
+                ";
+            }
+            $params = [$id_user_presensi];
+        }
+        
+        $query = $db->query($sql, $params);
+        $result = $query->getRow();
+        
+        // Convert to array if object
+        if ($result && is_object($result)) {
+            return (array) $result;
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Get next patrol after last scanned patrol for a presensi
+     * Returns the next patrol in sequence that hasn't been scanned
+     * For active shifts (tgl_masuk provided), also includes patrols from activities with NULL id_user_presensi created after shift start
+     */
+    public function getNextPatrolByPresensi($id_user_presensi, $id_company, $tgl_masuk = null, $id_user = null)
+    {
+        $db = \Config\Database::connect();
+        
+        // Get user_id from presensi if not provided
+        if (!$id_user && $id_user_presensi) {
+            $presensi = $db->table('user_presensi')->where('id', $id_user_presensi)->get()->getRowArray();
+            $id_user = $presensi['id_user'] ?? null;
+        }
+        
+        // Get last scanned patrol for this presensi
+        $lastPatrol = $this->getLastPatrolDataByPresensi($id_user_presensi, $tgl_masuk, $id_user, $id_company);
+        
+        // Get all patrols for this company
+        $patrolModel = new CompanyPatrolModel;
+        $allPatrols = $patrolModel->getPatrolByCompany($id_company);
+        
+        if (empty($allPatrols)) {
+            return null;
+        }
+        
+        // Get scanned patrol IDs for this presensi
+        // Build query based on whether tgl_masuk is provided (active shift)
+        if ($tgl_masuk && $id_user) {
+            // Active shift: Include patrols where id_user_presensi matches OR (id_user_presensi IS NULL AND created after shift start)
+            $sql = "
+                SELECT DISTINCT ap.id_patrol
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                LEFT JOIN user_presensi up ON a.id_user_presensi = up.id
+                WHERE a.id_company = ?
+                AND a.id_user = ?
+                AND (
+                    (a.id_user_presensi = ? AND up.id IS NOT NULL AND up.tgl_keluar IS NULL)
+                    OR
+                    (a.id_user_presensi IS NULL AND DATE(a.tanggal) >= DATE(?) AND TIMESTAMP(a.tanggal, a.waktu) >= ?)
+                )
+            ";
+            $params = [$id_company, $id_user, $id_user_presensi, $tgl_masuk, $tgl_masuk];
+        } else {
+            // Completed shift: Only count patrols with matching id_user_presensi
+            $sql = "
+                SELECT DISTINCT ap.id_patrol
+                FROM activity_patrol ap
+                JOIN activity a ON ap.id_activity = a.id_activity
+                JOIN user_presensi up ON a.id_user_presensi = up.id
+                WHERE a.id_user_presensi = ?
+                AND a.id_user_presensi IS NOT NULL
+                AND up.tgl_keluar IS NULL
+            ";
+            $params = [$id_user_presensi];
+        }
+        $scannedPatrols = $db->query($sql, $params)->getResult();
+        $scannedIds = array_column($scannedPatrols, 'id_patrol');
+        
+        // Find first uncompleted patrol
+        foreach ($allPatrols as $patrol) {
+            $patrolId = is_array($patrol) ? ($patrol['id_patrol'] ?? null) : ($patrol->id_patrol ?? null);
+            if ($patrolId && !in_array($patrolId, $scannedIds)) {
+                // Convert to array if object
+                if (is_object($patrol)) {
+                    return (array) $patrol;
+                }
+                return $patrol;
+            }
+        }
+        
+        // All patrols completed
+        return null;
     }
 }

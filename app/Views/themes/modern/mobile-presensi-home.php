@@ -281,7 +281,43 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 									if (!empty($companies) && !empty($companies[0]->jam_kerja_target)) {
 										$jam_kerja_target = intval($companies[0]->jam_kerja_target);
 									}
+									
+									// Check patrol status for active shift
+									if (isset($active_shift_patrol) && $active_shift_patrol && $active_shift_patrol['is_required']):
+										$patrolProgress = $active_shift_patrol['progress'] ?? ['percentage' => 0, 'completed' => 0, 'total' => 0];
+										$percentage = $patrolProgress['percentage'] ?? 0;
+										$isComplete = $active_shift_patrol['is_complete'] ?? false;
+										$nextPatrol = $active_shift_patrol['next_patrol'] ?? null;
 									?>
+										<div class="mt-2">
+											<?php if (!$isComplete): ?>
+												<p class="mb-1 text-danger small fw-semibold">
+													<i class="fas fa-exclamation-circle me-1"></i>Patroli belum lengkap
+												</p>
+											<?php endif; ?>
+											<div class="d-flex align-items-center mb-1">
+												<div class="progress flex-grow-1 me-2" style="height: 8px;">
+													<div class="progress-bar <?= $isComplete ? 'bg-success' : 'bg-warning' ?>" 
+														role="progressbar" 
+														style="width: <?= $percentage ?>%"
+														aria-valuenow="<?= $percentage ?>" 
+														aria-valuemin="0" 
+														aria-valuemax="100">
+													</div>
+												</div>
+												<small class="text-muted fw-semibold"><?= $percentage ?>%</small>
+											</div>
+											<?php if ($nextPatrol): ?>
+												<p class="mb-0 text-muted small">
+													<strong>Patroli berikutnya:</strong><br>
+													<?= htmlspecialchars($nextPatrol['nama_patrol'] ?? 'Unknown') ?>
+													<?php if (isset($nextPatrol['urutan'])): ?>
+														<br><small>Urutan: <?= $nextPatrol['urutan'] ?></small>
+													<?php endif; ?>
+												</p>
+											<?php endif; ?>
+										</div>
+									<?php endif; ?>
 								</div>
 							</div>
 						</a>

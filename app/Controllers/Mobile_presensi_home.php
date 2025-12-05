@@ -21,6 +21,7 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		
 		$this->model = new MobilePresensiHomeModel;	
 		$this->presensiModel = new UserPresensiModel;
+		$this->activityPatrolModel = new ActivityPatrolModel;
 		$this->data['title'] = 'Presensi';
 	}
 	
@@ -104,6 +105,45 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		}
 		
 		$this->data['patrol_status'] = $patrol_status;
+		
+		// Get active shift patrol data if user has active shift
+		$active_shift_patrol = null;
+		if ($lastPresensi && !empty($lastPresensi['tgl_masuk']) && empty($lastPresensi['tgl_keluar'])) {
+			// User has active shift
+			$id_user_presensi = $lastPresensi['id'] ?? null;
+			$active_company_id = $lastPresensi['id_company'] ?? null;
+			$tgl_masuk = $lastPresensi['tgl_masuk'] ?? null;
+			
+			if ($id_user_presensi && $active_company_id && $tgl_masuk) {
+				// Get patrol progress for this active shift
+				// Pass tgl_masuk and id_user to count patrols from activities with NULL id_user_presensi created after shift start
+				$patrolProgress = $activityPatrolModel->getPatrolProgressByPresensi($id_user_presensi, $active_company_id, $tgl_masuk, $id_user);
+				
+				// Get last patrol data for this active shift
+				$lastPatrolData = $activityPatrolModel->getLastPatrolDataByPresensi($id_user_presensi, $tgl_masuk, $id_user, $active_company_id);
+				
+				// Get next patrol (first uncompleted)
+				$nextPatrolData = $activityPatrolModel->getNextPatrolByPresensi($id_user_presensi, $active_company_id, $tgl_masuk, $id_user);
+				
+				// Check if patrol is required for this company
+				$isPatrolRequired = false;
+				if (isset($patrol_status[$active_company_id])) {
+					$isPatrolRequired = $patrol_status[$active_company_id]['is_required'] ?? false;
+				}
+				
+				$active_shift_patrol = [
+					'id_user_presensi' => $id_user_presensi,
+					'id_company' => $active_company_id,
+					'is_required' => $isPatrolRequired,
+					'progress' => $patrolProgress,
+					'last_patrol' => $lastPatrolData,
+					'next_patrol' => $nextPatrolData,
+					'is_complete' => $patrolProgress['percentage'] >= 100
+				];
+			}
+		}
+		
+		$this->data['active_shift_patrol'] = $active_shift_patrol;
 		
 		// Debug: Check if query returns data
 		if (empty($companies)) {
@@ -277,19 +317,15 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 				}
 			}
 			
-			// Validate photo if required
-			if (isset($setting['gunakan_foto_selfi']) && $setting['gunakan_foto_selfi'] == 'Y') {
-				if (!isset($data['foto']) || empty($data['foto'])) {
-					$error[] = 'Foto wajib diisi';
+			// Validate photo format if provided (photo is optional)
+			if (isset($data['foto']) && !empty($data['foto'])) {
+				$image = explode('data:image/jpeg;base64,', $data['foto']);
+				if (!isset($image[1]) || empty($image[1])) {
+					$error[] = 'Format foto tidak valid';
 				} else {
-					$image = explode('data:image/jpeg;base64,', $data['foto']);
-					if (!isset($image[1]) || empty($image[1])) {
-						$error[] = 'Format foto tidak valid';
-					} else {
-						$size = getimagesizefromstring(base64_decode(trim($image[1])));
-						if (!$size) {
-							$error[] = 'Foto tidak valid';
-						}
+					$size = getimagesizefromstring(base64_decode(trim($image[1])));
+					if (!$size) {
+						$error[] = 'Foto tidak valid';
 					}
 				}
 			}
@@ -320,17 +356,26 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 						$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $id_company, $tgl_masuk);
 						
 						if (!$allCompleted) {
-							// Get list of uncompleted patrols (only patrols not scanned AFTER shift start)
-							$uncompletedPatrols = $activityPatrolModel->getUncompletedPatrols($id_user, $id_company, $tgl_masuk);
-							$patrolNames = array_map(function($p) { 
-								// Handle both object and array formats
-								if (is_array($p)) {
-									return $p['nama_patrol'] ?? 'Unknown';
-								}
-								return $p->nama_patrol ?? 'Unknown';
-							}, $uncompletedPatrols);
+							// Get patrol progress with percentage and counts
+							$id_user_presensi = null;
+							if ($lastPresensi && isset($lastPresensi['id'])) {
+								$id_user_presensi = $lastPresensi['id'];
+							}
 							
-							$error[] = 'Anda belum menyelesaikan semua patrol yang wajib. Patrol yang belum di-scan: ' . implode(', ', $patrolNames) . '. Silakan selesaikan semua patrol terlebih dahulu sebelum melakukan absen pulang.';
+							if ($id_user_presensi && $tgl_masuk) {
+								// Get patrol progress for this active shift
+								// Pass tgl_masuk and id_user to count patrols from activities with NULL id_user_presensi created after shift start
+								$patrolProgress = $activityPatrolModel->getPatrolProgressByPresensi($id_user_presensi, $id_company, $tgl_masuk, $id_user);
+								$completed = $patrolProgress['completed'] ?? 0;
+								$total = $patrolProgress['total'] ?? 0;
+								$percentage = $patrolProgress['percentage'] ?? 0;
+								$remaining = max(0, $total - $completed);
+								
+								$error[] = 'Patrol telah dilakukan (' . $percentage . '%). Anda masih perlu ' . $remaining . ' patrol lagi. Silakan selesaikan semua patrol terlebih dahulu sebelum melakukan absen pulang.';
+							} else {
+								// Fallback if id_user_presensi or tgl_masuk not available
+								$error[] = 'Anda belum menyelesaikan semua patrol yang wajib. Silakan selesaikan semua patrol terlebih dahulu sebelum melakukan absen pulang.';
+							}
 						}
 					}
 				}
@@ -428,14 +473,6 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 							$result = ['status' => 'error', 'message' => 'Data gagal disimpan. Silakan coba lagi.'];
 						} else {
 							$result = ['status' => 'ok', 'message' => 'Data berhasil disimpan'];
-							
-							// Kirim email notifikasi setelah presensi masuk berhasil disimpan
-							try {
-								$this->sendPresensiEmail($insertResult, $id_company, 'masuk');
-							} catch (\Throwable $e) {
-								// Jangan ganggu flow utama jika email gagal
-								log_message('error', 'Presensi email (masuk) gagal: ' . $e->getMessage());
-							}
 						}
 					} catch (\Exception $e) {
 						$db->transRollback();
@@ -595,11 +632,50 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 							$result = ['status' => 'ok', 'message' => 'Data berhasil disimpan'];
 							
 							// Kirim email notifikasi setelah presensi pulang berhasil disimpan
+							// Only send email if user is not required to do patrol OR all patrols are completed
 							if ($presensiId && is_numeric($presensiId)) {
-								try {
-									$this->sendPresensiEmail($presensiId, $id_company, 'pulang');
-								} catch (\Throwable $e) {
-									log_message('error', 'Presensi email (pulang) gagal: ' . $e->getMessage());
+								// Get tgl_masuk from the completed shift to check patrols
+								$tgl_masuk = null;
+								if (isset($latestMasuk['tgl_masuk']) && !empty($latestMasuk['tgl_masuk'])) {
+									$tgl_masuk = $latestMasuk['tgl_masuk'];
+								}
+								
+								// Check if patrol is required
+								$isPatrolRequired = false;
+								if ($assignment) {
+									$companyModel = new CompanyModel;
+									$companySetting = $companyModel->getCompanySetting($id_company);
+									$is_patrol_mode = $companySetting['is_patrol_mode'] ?? 'N';
+									
+									// Combined: company patrol mode AND user's patrol requirement
+									$isPatrolRequired = ($is_patrol_mode == 'Y' && isset($assignment->isPatrolRequired) && $assignment->isPatrolRequired == 1);
+								}
+								
+								// Determine if email should be sent
+								$shouldSendEmail = false;
+								if (!$isPatrolRequired) {
+									// User is not required to do patrol - always send email
+									$shouldSendEmail = true;
+								} else {
+									// User is required to do patrol - check if all patrols are completed
+									$activityPatrolModel = new ActivityPatrolModel;
+									$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $id_company, $tgl_masuk);
+									
+									if ($allCompleted) {
+										// All patrols completed - send email
+										$shouldSendEmail = true;
+									} else {
+										// Not all patrols completed - don't send email
+										log_message('info', 'Presensi email (pulang) tidak dikirim: patrol belum selesai. User ID: ' . $id_user);
+									}
+								}
+								
+								if ($shouldSendEmail) {
+									try {
+										$this->sendPresensiEmail($presensiId, $id_company, 'pulang');
+									} catch (\Throwable $e) {
+										log_message('error', 'Presensi email (pulang) gagal: ' . $e->getMessage());
+									}
 								}
 							}
 						}
@@ -625,9 +701,13 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 	/**
 	 * Kirim email ringkasan presensi ke alamat email company
 	 * Mengikuti pola konfigurasi email di Mobile_activity.
+	 * Untuk "pulang", kirim email patrol recap dengan format tabel.
 	 */
 	private function sendPresensiEmail($presensiId, $idCompany, $jenisPresensi)
 	{
+		// Load email helper
+		helper('email_registrasi');
+		
 		// Ambil data user dari session
 		$user = $this->session->get('user');
 		$userName = $user['nama'] ?? 'Unknown';
@@ -649,23 +729,9 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 			return;
 		}
 		
-		// Tentukan tanggal & waktu berdasarkan jenis presensi
-		$tanggal = null;
-		$waktu = null;
-		if (!empty($presensi['tgl_keluar']) && $jenisPresensi === 'pulang') {
-			$tanggal = date('Y-m-d', strtotime($presensi['tgl_keluar']));
-			$waktu = date('H:i:s', strtotime($presensi['tgl_keluar']));
-		} else {
-			$tanggal = date('Y-m-d', strtotime($presensi['tgl_masuk']));
-			$waktu = date('H:i:s', strtotime($presensi['tgl_masuk']));
-		}
-		
-		// Koordinat GPS (jika ada)
-		$latitude = $presensi['latitude'] ?? null;
-		$longitude = $presensi['longitude'] ?? null;
-		$gpsUrl = null;
-		if ($latitude && $longitude) {
-			$gpsUrl = 'https://www.google.com/maps?q=' . $latitude . ',' . $longitude;
+		// Convert to array if object
+		if (is_object($presensi)) {
+			$presensi = (array) $presensi;
 		}
 		
 		// Siapkan daftar penerima dari field email company (semicolon-separated)
@@ -696,30 +762,96 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 			return;
 		}
 		
-		// Siapkan konten email sederhana
-		$jenisLabel = strtoupper($jenisPresensi);
-		$subject = 'Presensi ' . $jenisLabel . ' - ' . $userName . ' - ' . $tanggal;
-		
-		$body  = '<html><body>';
-		$body .= '<p>Yth. Bapak/Ibu,<br><br>';
-		$body .= 'Berikut ringkasan presensi yang baru saja tercatat di sistem:</p>';
-		$body .= '<table cellpadding="4" cellspacing="0" border="0">';
-		$body .= '<tr><td><strong>Karyawan</strong></td><td>: ' . htmlspecialchars($userName) . '</td></tr>';
-		$body .= '<tr><td><strong>Perusahaan</strong></td><td>: ' . htmlspecialchars($companyName) . '</td></tr>';
-		$body .= '<tr><td><strong>Jenis Presensi</strong></td><td>: ' . htmlspecialchars($jenisLabel) . '</td></tr>';
-		$body .= '<tr><td><strong>Tanggal</strong></td><td>: ' . htmlspecialchars($tanggal) . '</td></tr>';
-		$body .= '<tr><td><strong>Waktu</strong></td><td>: ' . htmlspecialchars($waktu) . '</td></tr>';
-		
-		if ($latitude && $longitude) {
-			$body .= '<tr><td><strong>Koordinat GPS</strong></td><td>: ' . htmlspecialchars($latitude) . ', ' . htmlspecialchars($longitude) . '</td></tr>';
-			if ($gpsUrl) {
-				$body .= '<tr><td><strong>Lokasi</strong></td><td>: <a href="' . htmlspecialchars($gpsUrl) . '" target="_blank">Lihat di Google Maps</a></td></tr>';
+		// For "pulang", send patrol recap email
+		if ($jenisPresensi === 'pulang' && !empty($presensi['tgl_masuk']) && !empty($presensi['tgl_keluar'])) {
+			// Get activities with patrol scans for this shift
+			$activityModel = new \App\Models\ActivityModel;
+			$activitiesList = $activityModel->getActivitiesWithPatrolsByPresensi(
+				$presensiId,
+				$presensi['tgl_masuk'],
+				$presensi['tgl_keluar']
+			);
+			
+			// Generate email content using patrol recap template
+			$body = email_patrol_recap_content($presensi, $activitiesList, $companyName, $userName);
+			
+			// Collect all activity photos for attachments
+			$attachments = [];
+			$upload_path = ROOTPATH . 'public/images/activity/';
+			
+			foreach ($activitiesList as $activity) {
+				if (!empty($activity['foto_activity'])) {
+					$photos_array = json_decode($activity['foto_activity'], true);
+					
+					if (json_last_error() === JSON_ERROR_NONE && is_array($photos_array)) {
+						foreach ($photos_array as $index => $photo) {
+							if (isset($photo['file_name'])) {
+								$file_path = $upload_path . $photo['file_name'];
+								
+								if (file_exists($file_path)) {
+									$attachments[] = [
+										'path' => $file_path,
+										'name' => 'patrol_photo_' . $activity['id_activity'] . '_' . ($index + 1) . '_' . $photo['file_name']
+									];
+								}
+							}
+						}
+					}
+				}
 			}
+			
+			// Format subject: "Rekap Aktifitas Patroli - User Name - Start Date - End Date"
+			$start_date = date('d/m/Y', strtotime($presensi['tgl_masuk']));
+			$end_date = date('d/m/Y', strtotime($presensi['tgl_keluar']));
+			$subject = 'Rekap Aktifitas Patroli - ' . $userName . ' - ' . $start_date . ' - ' . $end_date;
+			
+		} else {
+			// For "masuk" or other types, use simple email format
+			$tanggal = null;
+			$waktu = null;
+			if (!empty($presensi['tgl_keluar']) && $jenisPresensi === 'pulang') {
+				$tanggal = date('Y-m-d', strtotime($presensi['tgl_keluar']));
+				$waktu = date('H:i:s', strtotime($presensi['tgl_keluar']));
+			} else {
+				$tanggal = date('Y-m-d', strtotime($presensi['tgl_masuk']));
+				$waktu = date('H:i:s', strtotime($presensi['tgl_masuk']));
+			}
+			
+			// Koordinat GPS (jika ada)
+			$latitude = $presensi['latitude'] ?? null;
+			$longitude = $presensi['longitude'] ?? null;
+			$gpsUrl = null;
+			if ($latitude && $longitude) {
+				$gpsUrl = 'https://www.google.com/maps?q=' . $latitude . ',' . $longitude;
+			}
+			
+			// Siapkan konten email sederhana
+			$jenisLabel = strtoupper($jenisPresensi);
+			$subject = 'Presensi ' . $jenisLabel . ' - ' . $userName . ' - ' . $tanggal;
+			
+			$body  = '<html><body>';
+			$body .= '<p>Yth. Bapak/Ibu,<br><br>';
+			$body .= 'Berikut ringkasan presensi yang baru saja tercatat di sistem:</p>';
+			$body .= '<table cellpadding="4" cellspacing="0" border="0">';
+			$body .= '<tr><td><strong>Karyawan</strong></td><td>: ' . htmlspecialchars($userName) . '</td></tr>';
+			$body .= '<tr><td><strong>Perusahaan</strong></td><td>: ' . htmlspecialchars($companyName) . '</td></tr>';
+			$body .= '<tr><td><strong>Jenis Presensi</strong></td><td>: ' . htmlspecialchars($jenisLabel) . '</td></tr>';
+			$body .= '<tr><td><strong>Tanggal</strong></td><td>: ' . htmlspecialchars($tanggal) . '</td></tr>';
+			$body .= '<tr><td><strong>Waktu</strong></td><td>: ' . htmlspecialchars($waktu) . '</td></tr>';
+			
+			if ($latitude && $longitude) {
+				$body .= '<tr><td><strong>Koordinat GPS</strong></td><td>: ' . htmlspecialchars($latitude) . ', ' . htmlspecialchars($longitude) . '</td></tr>';
+				if ($gpsUrl) {
+					$body .= '<tr><td><strong>Lokasi</strong></td><td>: <a href="' . htmlspecialchars($gpsUrl) . '" target="_blank">Lihat di Google Maps</a></td></tr>';
+				}
+			}
+			
+			$body .= '</table>';
+			$body .= '<p style="margin-top:16px;">Email ini dikirim otomatis oleh sistem presensi dan tidak perlu dibalas.</p>';
+			$body .= '</body></html>';
+			
+			$attachments = [];
 		}
-		
-		$body .= '</table>';
-		$body .= '<p style="margin-top:16px;">Email ini dikirim otomatis oleh sistem presensi dan tidak perlu dibalas.</p>';
-		$body .= '</body></html>';
 		
 		// Kirim email ke masing-masing penerima
 		$emailConfig = new \Config\EmailConfig;
@@ -735,7 +867,7 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 				'to_name'        => $companyName,
 				'email_subject'  => $subject,
 				'email_content'  => $body,
-				'attachments'    => [],
+				'attachments'    => $attachments,
 			];
 			
 			$result = $emailLib->send($emailData);
@@ -782,14 +914,88 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		$id_user = $this->session->get('user')['id_user'];
 		$companies = $userCompanyModel->getActiveCompanyByUser($id_user);
 		
-		// Load company settings
+		// Load company settings for each company and check patrol status
 		$companyModel = new \App\Models\CompanyModel;
+		$activityPatrolModel = new ActivityPatrolModel;
+		$patrol_status = [];
+		
+		// Get current shift's tgl_masuk if user has active shift
+		$lastPresensi = $this->presensiModel->getLastPresensi($id_user);
+		$tgl_masuk = null;
+		if ($lastPresensi && !empty($lastPresensi['tgl_masuk']) && empty($lastPresensi['tgl_keluar'])) {
+			// User has active shift, use its tgl_masuk for patrol validation
+			$tgl_masuk = $lastPresensi['tgl_masuk'];
+		}
+		
 		foreach ($companies as $company) {
 			$company->setting_data = $companyModel->getCompanySetting($company->id_company);
+			
+			// Check if patrol is required for this company
+			$is_patrol_mode = $company->setting_data['is_patrol_mode'] ?? 'N';
+			$isPatrolRequired = ($is_patrol_mode == 'Y' && isset($company->isPatrolRequired) && $company->isPatrolRequired == 1);
+			
+			if ($isPatrolRequired) {
+				// Check if all patrols are completed (within current shift if active)
+				$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $company->id_company, $tgl_masuk);
+				$uncompletedPatrols = [];
+				
+				if (!$allCompleted) {
+					$uncompletedPatrols = $activityPatrolModel->getUncompletedPatrols($id_user, $company->id_company, $tgl_masuk);
+				}
+				
+				$patrol_status[$company->id_company] = [
+					'is_required' => true,
+					'all_completed' => $allCompleted,
+					'uncompleted' => $uncompletedPatrols
+				];
+			} else {
+				$patrol_status[$company->id_company] = [
+					'is_required' => false,
+					'all_completed' => true,
+					'uncompleted' => []
+				];
+			}
+		}
+		
+		// Get active shift patrol data if user has active shift
+		$active_shift_patrol = null;
+		if ($lastPresensi && !empty($lastPresensi['tgl_masuk']) && empty($lastPresensi['tgl_keluar'])) {
+			// User has active shift
+			$id_user_presensi = $lastPresensi['id'] ?? null;
+			$active_company_id = $lastPresensi['id_company'] ?? null;
+			$tgl_masuk = $lastPresensi['tgl_masuk'] ?? null;
+			
+			if ($id_user_presensi && $active_company_id && $tgl_masuk) {
+				// Get patrol progress for this active shift
+				// Pass tgl_masuk and id_user to count patrols from activities with NULL id_user_presensi created after shift start
+				$patrolProgress = $activityPatrolModel->getPatrolProgressByPresensi($id_user_presensi, $active_company_id, $tgl_masuk, $id_user);
+				
+				// Get last patrol data for this active shift
+				$lastPatrolData = $activityPatrolModel->getLastPatrolDataByPresensi($id_user_presensi, $tgl_masuk, $id_user, $active_company_id);
+				
+				// Get next patrol (first uncompleted)
+				$nextPatrolData = $activityPatrolModel->getNextPatrolByPresensi($id_user_presensi, $active_company_id, $tgl_masuk, $id_user);
+				
+				// Check if patrol is required for this company
+				$isPatrolRequired = false;
+				if (isset($patrol_status[$active_company_id])) {
+					$isPatrolRequired = $patrol_status[$active_company_id]['is_required'] ?? false;
+				}
+				
+				$active_shift_patrol = [
+					'id_user_presensi' => $id_user_presensi,
+					'id_company' => $active_company_id,
+					'is_required' => $isPatrolRequired,
+					'progress' => $patrolProgress,
+					'last_patrol' => $lastPatrolData,
+					'next_patrol' => $nextPatrolData,
+					'is_complete' => $patrolProgress['percentage'] >= 100
+				];
+			}
 		}
 		
 		// Get latest presensi record
-		$last_presensi = $this->presensiModel->getLastPresensi($id_user);
+		$last_presensi = $lastPresensi;
 		
 		// Get company-specific settings
 		$company_setting = null;
@@ -814,7 +1020,7 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		$waktu_masuk = $waktu_pulang = 'Belum absen';
 		$tanggal_masuk = $tanggal_pulang = '';
 		
-		$last = $last_presensi;
+		$last = $lastPresensi;
 		if ($last && is_object($last)) {
 			$last = (array) $last;
 		}
@@ -873,6 +1079,43 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 										<p class="mt-1 mb-0 waktu-presensi fs-5 fw-semibold"><?=$waktu_pulang?></p>
 										<?php if ($tanggal_pulang): ?>
 										<p class="mt-1 mb-0 text-muted small"><?=$tanggal_pulang?></p>
+										<?php endif; ?>
+										<?php
+										// Check patrol status for active shift
+										if (isset($active_shift_patrol) && $active_shift_patrol && $active_shift_patrol['is_required']):
+											$patrolProgress = $active_shift_patrol['progress'] ?? ['percentage' => 0, 'completed' => 0, 'total' => 0];
+											$percentage = $patrolProgress['percentage'] ?? 0;
+											$isComplete = $active_shift_patrol['is_complete'] ?? false;
+											$nextPatrol = $active_shift_patrol['next_patrol'] ?? null;
+										?>
+											<div class="mt-2">
+												<?php if (!$isComplete): ?>
+													<p class="mb-1 text-danger small fw-semibold">
+														<i class="fas fa-exclamation-circle me-1"></i>Patroli belum lengkap
+													</p>
+												<?php endif; ?>
+												<div class="d-flex align-items-center mb-1">
+													<div class="progress flex-grow-1 me-2" style="height: 8px;">
+														<div class="progress-bar <?= $isComplete ? 'bg-success' : 'bg-warning' ?>" 
+															role="progressbar" 
+															style="width: <?= $percentage ?>%"
+															aria-valuenow="<?= $percentage ?>" 
+															aria-valuemin="0" 
+															aria-valuemax="100">
+														</div>
+													</div>
+													<small class="text-muted fw-semibold"><?= $percentage ?>%</small>
+												</div>
+												<?php if ($nextPatrol): ?>
+													<p class="mb-0 text-muted small">
+														<strong>Patroli berikutnya:</strong><br>
+														<?= htmlspecialchars($nextPatrol['nama_patrol'] ?? 'Unknown') ?>
+														<?php if (isset($nextPatrol['urutan'])): ?>
+															<br><small>Urutan: <?= $nextPatrol['urutan'] ?></small>
+														<?php endif; ?>
+													</p>
+												<?php endif; ?>
+											</div>
 										<?php endif; ?>
 									</div>
 								</div>

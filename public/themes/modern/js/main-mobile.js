@@ -918,6 +918,7 @@ $(document).ready(function() {
 						'</div>' +
 						'<button type="button" class="btn btn-success" id="btn-ambil-foto" style="display:none" disabled>Ambil Foto</button>' +
 						'<button type="button" class="btn btn-primary" id="btn-submit-presensi" style="display:none">Submit</button>' +
+						'<button type="button" class="btn btn-secondary" id="btn-ambil-tanpa-foto" style="display:none">Ambil</button>' +
 					'</div>',
 			closeButton: false
 		});
@@ -930,6 +931,20 @@ $(document).ready(function() {
 			$('.live-jam').html(jam.substr(-2) + ':' + menit.substr(-2) + ':' + detik.substr(-2));
 			
 		}, 1000);
+		
+		// Always show "Ambil" button to proceed without photo
+		$('#btn-ambil-tanpa-foto').show();
+		
+		// Click handler for "Ambil" button (proceed without photo)
+		$('#btn-ambil-tanpa-foto').click(function(){
+			$bootbox_presensi.find('button').prop('disabled', true);
+			$(this).prepend('<span class="spinner-border spinner-border-sm me-2">');
+			// Ensure foto is empty
+			data.foto = '';
+			$('#presensi-container').show();
+			$('#video-container, #btn-ambil-foto, #btn-submit-presensi, #canvas-container, #presensi-flash-control-wrapper').hide();
+			saveData(data);
+		});
 		
 		if (setting.gunakan_foto_selfi == 'Y') {
 			
@@ -955,7 +970,14 @@ $(document).ready(function() {
 				applyPresensiFlashMode(mode);
 			});
 
-			attachWebcam();
+			// Try to attach webcam, but handle errors gracefully
+			attachWebcam().catch(function(error) {
+				// Camera failed to load - hide camera elements and show only "Ambil" button
+				console.log('Camera failed to load:', error);
+				$('#video-container, #btn-ambil-foto, #presensi-flash-control-wrapper').hide();
+				$('#btn-ambil-tanpa-foto').show();
+			});
+			
 			$('#btn-submit-presensi').click(function(){
 				$bootbox_presensi.find('button').prop('disabled', true);
 				$(this).prepend('<span class="spinner-border spinner-border-sm me-2">');
@@ -964,16 +986,14 @@ $(document).ready(function() {
 			});
 			
 		} else {
-			
-			$('#presensi-container').show();
-			saveData(data);
+			// Photo not required - show "Ambil" button only
+			$('#presensi-container').hide();
 		}
 	};
 	
 	let video = '';
 	async function attachWebcam() {
-		
-		navigator.mediaDevices.getUserMedia({video: true})
+		return navigator.mediaDevices.getUserMedia({video: true})
 		.then((stream) => 
 		{
 			camera_dimension = stream.getVideoTracks()[0].getSettings();
@@ -1031,8 +1051,12 @@ $(document).ready(function() {
 		})
 		.catch((err) => {
 			$('#webcam-loader').remove();
-			alert_icon('Gagal memuat kamera, cek console browser');
-			console.log(err);
+			$('#video-container, #btn-ambil-foto, #presensi-flash-control-wrapper').hide();
+			$('#btn-ambil-tanpa-foto').show();
+			// Don't show alert, just log - user can proceed with "Ambil" button
+			console.log('Camera failed to load:', err);
+			// Re-throw error so caller can handle it
+			throw err;
 		});
 	}
 
