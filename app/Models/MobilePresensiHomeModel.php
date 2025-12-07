@@ -46,6 +46,28 @@ class MobilePresensiHomeModel extends \App\Models\BaseModel
 	}
 
 	/**
+	 * Get last 5 attendance records for a user, ordered by newest first
+	 * $id_user: user ID
+	 */
+	public function getLast5RiwayatPresensi($id_user)
+	{
+		$sql = "SELECT
+					DATE(tgl_masuk) AS shift_date,
+					TIME(tgl_masuk) AS presensi_masuk,
+					TIME(tgl_keluar) AS presensi_pulang,
+					durasi,
+					is_valid,
+					id_company,
+					tgl_masuk,
+					tgl_keluar
+				FROM user_presensi
+				WHERE id_user = ?
+				ORDER BY tgl_masuk DESC
+				LIMIT 5";
+		return $this->db->query($sql, [$id_user])->getResultArray();
+	}
+
+	/**
 	 * Simpan data presensi "masuk"
 	 * $data harus termasuk: id_user, id_company, location[coords][latitude,longitude], [foto]
 	 */

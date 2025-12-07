@@ -214,14 +214,6 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 				$tanggal_masuk = date('d/m/Y', strtotime($last_array['tgl_masuk']));
 			}
 		}
-		else if (!empty($last_array['tgl_keluar'])) {
-			$waktu_pulang = date('H:i', strtotime($last_array['tgl_keluar']));
-			$tanggal_pulang = date('d/m/Y', strtotime($last_array['tgl_keluar']));
-			if (!empty($last_array['tgl_masuk'])) {
-				$waktu_masuk = date('H:i', strtotime($last_array['tgl_masuk']));
-				$tanggal_masuk = date('d/m/Y', strtotime($last_array['tgl_masuk']));
-			}
-		}
 	}
 	$today_day_of_week = date('w');
 	$is_today_working_day = in_array($today_day_of_week, $company_setting['hari_kerja']);
@@ -349,64 +341,52 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 					</thead>
 					<tbody>
 						<?php
-						$nama_bulan = nama_bulan();
-						$nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-						$end_date = strtotime(date('Y-m-d'));
-						$start_date = strtotime('-' . $setting_presensi['jml_riwayat_presensi_home'] . ' days', $end_date);
-						$hari_kerja = $company_setting['hari_kerja'] ?? [1, 2, 3, 4, 5];
+						$last5_riwayat = $last5_riwayat ?? [];
 						$no = 1;
-						$attendance_records = [];
-						for ($i = $end_date; $i > $start_date; $i = strtotime('-1 day', $i)) {
-							$curr = date('Y-m-d', $i);
-							$date_w = date('w', $i);
-							if (in_array($date_w, $hari_kerja) && key_exists($curr, $riwayat_presensi)) {
-								$presensi_masuk = $riwayat_presensi[$curr]['masuk']['presensi_masuk'] ?? null;
-								$presensi_pulang = $riwayat_presensi[$curr]['pulang']['presensi_pulang'] ?? null;
-								$durasi = $riwayat_presensi[$curr]['durasi'] ?? null;
-								$is_valid = $riwayat_presensi[$curr]['is_valid'] ?? 0;
-								if ($presensi_masuk || $presensi_pulang) {
-									$attendance_records[] = [
-										'date' => $curr,
-										'masuk' => $presensi_masuk,
-										'pulang' => $presensi_pulang,
-										'durasi' => $durasi,
-										'is_valid' => $is_valid
-									];
-								}
-							}
-						}
-						if (empty($attendance_records)) {
+						
+						if (empty($last5_riwayat)) {
 							echo '<tr><td colspan="5" class="text-center text-muted py-4">Tidak ada data presensi untuk periode ini</td></tr>';
 						} else {
-							foreach ($attendance_records as $record) {
+							foreach ($last5_riwayat as $record) {
 								$waktu_masuk_display = '-';
-								if ($record['masuk']) {
-									$waktu_masuk_time = substr($record['masuk'], 0, 5);
+								if (!empty($record['presensi_masuk'])) {
+									$waktu_masuk_time = substr($record['presensi_masuk'], 0, 5);
 									$waktu_masuk_display = '<span>' . $waktu_masuk_time . '</span>';
 								}
+								
 								$waktu_pulang_display = '-';
-								if ($record['pulang']) {
-									$waktu_pulang_time = substr($record['pulang'], 0, 5);
+								if (!empty($record['presensi_pulang'])) {
+									$waktu_pulang_time = substr($record['presensi_pulang'], 0, 5);
 									$waktu_pulang_display = '<span>' . $waktu_pulang_time . '</span>';
 								}
-								$tanggal_display = date('d/m/Y', strtotime($record['date']));
-								if ($record['masuk'] && $record['pulang']) {
-									$masuk_timestamp = strtotime($record['date'] . ' ' . $record['masuk']);
-									$pulang_timestamp = strtotime($record['date'] . ' ' . $record['pulang']);
-									if ($pulang_timestamp < $masuk_timestamp) {
-										$pulang_date = date('Y-m-d', strtotime($record['date'] . ' +1 day'));
-										$tanggal_display = date('d/m/Y', strtotime($record['date'])) . ' - ' . date('d/m/Y', strtotime($pulang_date));
+								
+								$shift_date = $record['shift_date'] ?? null;
+								$tanggal_display = '-';
+								if ($shift_date) {
+									$tanggal_display = date('d/m/Y', strtotime($shift_date));
+									
+									// Check if pulang is on next day
+									if (!empty($record['tgl_masuk']) && !empty($record['tgl_keluar'])) {
+										$masuk_timestamp = strtotime($record['tgl_masuk']);
+										$pulang_timestamp = strtotime($record['tgl_keluar']);
+										if ($pulang_timestamp < $masuk_timestamp || date('Y-m-d', $pulang_timestamp) != date('Y-m-d', $masuk_timestamp)) {
+											$pulang_date = date('Y-m-d', $pulang_timestamp);
+											$tanggal_display = date('d/m/Y', strtotime($shift_date)) . ' - ' . date('d/m/Y', strtotime($pulang_date));
+										}
 									}
 								}
+								
 								$jam_kerja_display = '-';
-								if ($record['durasi'] !== null && $record['durasi'] > 0) {
+								if (isset($record['durasi']) && $record['durasi'] !== null && $record['durasi'] > 0) {
 									$durasi_formatted = number_format($record['durasi'], 2);
 									$durasi_formatted = rtrim(rtrim($durasi_formatted, '0'), '.');
 									$jam_kerja_display = $durasi_formatted . ' jam';
-									$valid_class = $record['is_valid'] ? 'bg-success' : 'bg-warning';
-									$valid_text = $record['is_valid'] ? 'Valid' : 'Tidak Valid';
+									$is_valid = $record['is_valid'] ?? 0;
+									$valid_class = $is_valid ? 'bg-success' : 'bg-warning';
+									$valid_text = $is_valid ? 'Valid' : 'Tidak Valid';
 									$jam_kerja_display .= ' <span class="badge ' . $valid_class . ' ms-1">' . $valid_text . '</span>';
 								}
+								
 								echo '<tr>';
 								echo '<td class="text-center fw-semibold">' . $no . '</td>';
 								echo '<td class="fw-medium">' . $tanggal_display . '</td>';

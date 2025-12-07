@@ -59,6 +59,11 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		// Get active companies for this user
 		$userCompanyModel = new UserCompanyModel;
 		$id_user = $this->session->get('user')['id_user'];
+		
+		// Get last 5 attendance records for display
+		$last5Riwayat = $this->model->getLast5RiwayatPresensi($id_user);
+		$this->data['last5_riwayat'] = $last5Riwayat;
+		
 		$companies = $userCompanyModel->getActiveCompanyByUser($id_user);
 		
 		// Load company settings for each company and check patrol status
@@ -351,31 +356,31 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 					$isPatrolRequired = ($is_patrol_mode == 'Y' && isset($assignment->isPatrolRequired) && $assignment->isPatrolRequired == 1);
 					
 					if ($isPatrolRequired) {
-						// Check if all patrols are completed (only patrols done AFTER shift start)
+						// Get patrol progress directly using getPatrolProgressByPresensi
 						$activityPatrolModel = new ActivityPatrolModel;
-						$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $id_company, $tgl_masuk);
+						$id_user_presensi = null;
+						if ($lastPresensi && isset($lastPresensi['id'])) {
+							$id_user_presensi = $lastPresensi['id'];
+						}
 						
-						if (!$allCompleted) {
-							// Get patrol progress with percentage and counts
-							$id_user_presensi = null;
-							if ($lastPresensi && isset($lastPresensi['id'])) {
-								$id_user_presensi = $lastPresensi['id'];
-							}
+						if ($id_user_presensi && $tgl_masuk) {
+							// Get patrol progress for this active shift
+							// Pass tgl_masuk and id_user to count patrols from activities with NULL id_user_presensi created after shift start
+							$patrolProgress = $activityPatrolModel->getPatrolProgressByPresensi($id_user_presensi, $id_company, $tgl_masuk, $id_user);
+							$completed = $patrolProgress['completed'] ?? 0;
+							$total = $patrolProgress['total'] ?? 0;
+							$percentage = $patrolProgress['percentage'] ?? 0;
 							
-							if ($id_user_presensi && $tgl_masuk) {
-								// Get patrol progress for this active shift
-								// Pass tgl_masuk and id_user to count patrols from activities with NULL id_user_presensi created after shift start
-								$patrolProgress = $activityPatrolModel->getPatrolProgressByPresensi($id_user_presensi, $id_company, $tgl_masuk, $id_user);
-								$completed = $patrolProgress['completed'] ?? 0;
-								$total = $patrolProgress['total'] ?? 0;
-								$percentage = $patrolProgress['percentage'] ?? 0;
-								$remaining = max(0, $total - $completed);
-								
-								$error[] = 'Patrol telah dilakukan (' . $percentage . '%). Anda masih perlu ' . $remaining . ' patrol lagi. Silakan selesaikan semua patrol terlebih dahulu sebelum melakukan absen pulang.';
-							} else {
-								// Fallback if id_user_presensi or tgl_masuk not available
-								$error[] = 'Anda belum menyelesaikan semua patrol yang wajib. Silakan selesaikan semua patrol terlebih dahulu sebelum melakukan absen pulang.';
+							// Check if completed < required
+							if ($completed < $total) {
+								$remaining = $total - $completed;
+								// Format: "Patrol has been performed (X%). You still need <required - completed> more patrol(s)."
+								$error[] = 'Patrol has been performed (' . $percentage . '%). You still need ' . $remaining . ' more patrol' . ($remaining != 1 ? 's' : '') . '.';
 							}
+							// If completed == required (percentage == 100), continue with check-out (no error)
+						} else {
+							// Fallback if id_user_presensi or tgl_masuk not available
+							$error[] = 'Patrol has been performed (0%). You still need more patrols.';
 						}
 					}
 				}
@@ -496,18 +501,20 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 							return;
 						}
 						
-						// Convert to array if object for consistent access
-						if (is_object($last)) {
-							$last = (array) $last;
-						}
-						
-						if (!isset($last['tgl_keluar']) || !empty($last['tgl_keluar'])) {
-							$db->transRollback();
-							log_message('error', 'Presensi pulang: User sudah melakukan pulang atau tidak ada shift aktif. User ID: ' . $id_user);
-							$result = ['status' => 'error', 'message' => 'Anda belum melakukan presensi masuk. Silakan lakukan presensi masuk terlebih dahulu.'];
-							echo json_encode($result);
-							return;
-						}
+					// Convert to array if object for consistent access
+					if (is_object($last)) {
+						$last = (array) $last;
+					}
+					
+					// Check if tgl_keluar has a value (shift already completed) - block check-out
+					// If tgl_keluar is NULL/empty, active shift exists - allow check-out
+					if (!empty($last['tgl_keluar'])) {
+						$db->transRollback();
+						log_message('error', 'Presensi pulang: User sudah melakukan pulang atau tidak ada shift aktif. User ID: ' . $id_user);
+						$result = ['status' => 'error', 'message' => 'Anda belum melakukan presensi masuk. Silakan lakukan presensi masuk terlebih dahulu.'];
+						echo json_encode($result);
+						return;
+					}
 						
 						// Validate assignment exists before accessing properties
 						if (!$assignment) {
@@ -651,32 +658,39 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 									$isPatrolRequired = ($is_patrol_mode == 'Y' && isset($assignment->isPatrolRequired) && $assignment->isPatrolRequired == 1);
 								}
 								
-								// Determine if email should be sent
-								$shouldSendEmail = false;
-								if (!$isPatrolRequired) {
-									// User is not required to do patrol - always send email
-									$shouldSendEmail = true;
-								} else {
-									// User is required to do patrol - check if all patrols are completed
+							// Determine if email should be sent
+							$shouldSendEmail = false;
+							if (!$isPatrolRequired) {
+								// User is not required to do patrol - always send email
+								$shouldSendEmail = true;
+							} else {
+								// User is required to do patrol - check if all patrols are completed using getPatrolProgressByPresensi
+								if ($presensiId && $tgl_masuk) {
 									$activityPatrolModel = new ActivityPatrolModel;
-									$allCompleted = $activityPatrolModel->areAllPatrolsCompleted($id_user, $id_company, $tgl_masuk);
+									$patrolProgress = $activityPatrolModel->getPatrolProgressByPresensi($presensiId, $id_company, $tgl_masuk, $id_user);
+									$completed = $patrolProgress['completed'] ?? 0;
+									$total = $patrolProgress['total'] ?? 0;
 									
-									if ($allCompleted) {
+									if ($completed == $total && $total > 0) {
 										// All patrols completed - send email
 										$shouldSendEmail = true;
 									} else {
 										// Not all patrols completed - don't send email
-										log_message('info', 'Presensi email (pulang) tidak dikirim: patrol belum selesai. User ID: ' . $id_user);
+										log_message('info', 'Presensi email (pulang) tidak dikirim: patrol belum selesai. User ID: ' . $id_user . ', Completed: ' . $completed . ', Total: ' . $total);
 									}
+								} else {
+									// Fallback: if presensiId or tgl_masuk not available, don't send email
+									log_message('warning', 'Presensi email (pulang) tidak dikirim: presensiId atau tgl_masuk tidak tersedia. User ID: ' . $id_user);
 								}
-								
-								if ($shouldSendEmail) {
-									try {
-										$this->sendPresensiEmail($presensiId, $id_company, 'pulang');
-									} catch (\Throwable $e) {
-										log_message('error', 'Presensi email (pulang) gagal: ' . $e->getMessage());
-									}
+							}
+							
+							if ($shouldSendEmail) {
+								try {
+									$this->sendPresensiEmail($presensiId, $id_company, 'pulang');
+								} catch (\Throwable $e) {
+									log_message('error', 'Presensi email (pulang) gagal: ' . $e->getMessage());
 								}
+							}
 							}
 						}
 					} catch (\Exception $e) {
@@ -912,6 +926,10 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		// Get active companies for this user
 		$userCompanyModel = new UserCompanyModel;
 		$id_user = $this->session->get('user')['id_user'];
+		
+		// Get last 5 attendance records for display
+		$last5Riwayat = $this->model->getLast5RiwayatPresensi($id_user);
+		
 		$companies = $userCompanyModel->getActiveCompanyByUser($id_user);
 		
 		// Load company settings for each company and check patrol status
@@ -1031,13 +1049,6 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 					$waktu_masuk = date('H:i', strtotime($last['tgl_masuk']));
 					$tanggal_masuk = date('d/m/Y', strtotime($last['tgl_masuk']));
 				}
-			} else if (!empty($last['tgl_keluar'])) {
-				$waktu_pulang = date('H:i', strtotime($last['tgl_keluar']));
-				$tanggal_pulang = date('d/m/Y', strtotime($last['tgl_keluar']));
-				if (!empty($last['tgl_masuk'])) {
-					$waktu_masuk = date('H:i', strtotime($last['tgl_masuk']));
-					$tanggal_masuk = date('d/m/Y', strtotime($last['tgl_masuk']));
-				}
 			}
 		}
 		
@@ -1131,36 +1142,7 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 		
 		// Render history section HTML
 		ob_start();
-		$nama_bulan = nama_bulan();
-		$nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-		$end_date_ts = strtotime(date('Y-m-d'));
-		$start_date_ts = strtotime('-' . $this->data['setting_presensi']['jml_riwayat_presensi_home'] . ' days', $end_date_ts);
-		$hari_kerja = $company_setting['hari_kerja'] ?? [1,2,3,4,5];
 		$no = 1;
-		
-		// Collect all attendance records
-		$attendance_records = [];
-		for ($i = $end_date_ts; $i > $start_date_ts; $i = strtotime('-1 day', $i)) {
-			$curr = date('Y-m-d', $i);
-			$date_w = date('w', $i);
-			
-			if (in_array($date_w, $hari_kerja) && key_exists($curr, $riwayat_presensi)) {
-				$presensi_masuk = $riwayat_presensi[$curr]['masuk']['presensi_masuk'] ?? null;
-				$presensi_pulang = $riwayat_presensi[$curr]['pulang']['presensi_pulang'] ?? null;
-				$durasi = $riwayat_presensi[$curr]['durasi'] ?? null;
-				$is_valid = $riwayat_presensi[$curr]['is_valid'] ?? 0;
-				
-				if ($presensi_masuk || $presensi_pulang) {
-					$attendance_records[] = [
-						'date' => $curr,
-						'masuk' => $presensi_masuk,
-						'pulang' => $presensi_pulang,
-						'durasi' => $durasi,
-						'is_valid' => $is_valid
-					];
-				}
-			}
-		}
 		?>
 		<div id="presensi-history-container">
 			<div class="d-flex align-items-center justify-content-between mt-4 mb-2">
@@ -1182,45 +1164,51 @@ class Mobile_presensi_home extends \App\Controllers\BaseController
 						</thead>
 						<tbody>
 							<?php
-							if (empty($attendance_records)) {
+							if (empty($last5Riwayat)) {
 								echo '<tr><td colspan="5" class="text-center text-muted py-4">Tidak ada data presensi untuk periode ini</td></tr>';
 							} else {
-								foreach ($attendance_records as $record) {
+								foreach ($last5Riwayat as $record) {
 									// Format waktu masuk
 									$waktu_masuk_display = '-';
-									if ($record['masuk']) {
-										$waktu_masuk_time = substr($record['masuk'], 0, 5);
+									if (!empty($record['presensi_masuk'])) {
+										$waktu_masuk_time = substr($record['presensi_masuk'], 0, 5);
 										$waktu_masuk_display = '<span>' . $waktu_masuk_time . '</span>';
 									}
 									
 									// Format waktu pulang
 									$waktu_pulang_display = '-';
-									if ($record['pulang']) {
-										$waktu_pulang_time = substr($record['pulang'], 0, 5);
+									if (!empty($record['presensi_pulang'])) {
+										$waktu_pulang_time = substr($record['presensi_pulang'], 0, 5);
 										$waktu_pulang_display = '<span>' . $waktu_pulang_time . '</span>';
 									}
 									
 									// Determine date display
-									$tanggal_display = date('d/m/Y', strtotime($record['date']));
-									if ($record['masuk'] && $record['pulang']) {
-										$masuk_timestamp = strtotime($record['date'] . ' ' . $record['masuk']);
-										$pulang_timestamp = strtotime($record['date'] . ' ' . $record['pulang']);
+									$shift_date = $record['shift_date'] ?? null;
+									$tanggal_display = '-';
+									if ($shift_date) {
+										$tanggal_display = date('d/m/Y', strtotime($shift_date));
 										
-										if ($pulang_timestamp < $masuk_timestamp) {
-											$pulang_date = date('Y-m-d', strtotime($record['date'] . ' +1 day'));
-											$tanggal_display = date('d/m/Y', strtotime($record['date'])) . ' - ' . date('d/m/Y', strtotime($pulang_date));
+										// Check if pulang is on next day
+										if (!empty($record['tgl_masuk']) && !empty($record['tgl_keluar'])) {
+											$masuk_timestamp = strtotime($record['tgl_masuk']);
+											$pulang_timestamp = strtotime($record['tgl_keluar']);
+											if ($pulang_timestamp < $masuk_timestamp || date('Y-m-d', $pulang_timestamp) != date('Y-m-d', $masuk_timestamp)) {
+												$pulang_date = date('Y-m-d', $pulang_timestamp);
+												$tanggal_display = date('d/m/Y', strtotime($shift_date)) . ' - ' . date('d/m/Y', strtotime($pulang_date));
+											}
 										}
 									}
 									
 									// Format jam kerja
 									$jam_kerja_display = '-';
-									if ($record['durasi'] !== null && $record['durasi'] > 0) {
+									if (isset($record['durasi']) && $record['durasi'] !== null && $record['durasi'] > 0) {
 										$durasi_formatted = number_format($record['durasi'], 2);
 										$durasi_formatted = rtrim(rtrim($durasi_formatted, '0'), '.');
 										$jam_kerja_display = $durasi_formatted . ' jam';
 										
-										$valid_class = $record['is_valid'] ? 'bg-success' : 'bg-warning';
-										$valid_text = $record['is_valid'] ? 'Valid' : 'Tidak Valid';
+										$is_valid = $record['is_valid'] ?? 0;
+										$valid_class = $is_valid ? 'bg-success' : 'bg-warning';
+										$valid_text = $is_valid ? 'Valid' : 'Tidak Valid';
 										$jam_kerja_display .= ' <span class="badge ' . $valid_class . ' ms-1">' . $valid_text . '</span>';
 									}
 									

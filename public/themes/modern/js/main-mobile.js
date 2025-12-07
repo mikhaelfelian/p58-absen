@@ -1101,10 +1101,10 @@ $(document).ready(function() {
 					}
 					toast_mobile('<i class="bi bi-check-circle me-2"></i>Data berhasil disimpan');
 
-					// Refresh presensi buttons and history sections via AJAX
+					// Force redirect to refresh the page completely
 					// Beri sedikit jeda agar user sempat melihat toast
 					setTimeout(function() {
-						refreshPresensiSections();
+						window.location.href = base_url + 'mobile-presensi-home';
 					}, 800);
 					/* let $bootbox_timer = bootbox.dialog({
 						message: '<div class="text-center mt-4 mb-4"><div class="mb-2 fs-1 text-success"><i class="far fa-circle-check"></i></div><p class="mb-4">Data presensi ' + data.data.jenis_presensi + ' berhasil disimpan</p></div>',
