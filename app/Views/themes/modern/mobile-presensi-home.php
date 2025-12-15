@@ -256,7 +256,12 @@ $nama_hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 					<div class="col-6">
 						<a id="presensi-pulang" href="#"
 							class="bg-light presensi-container box-absen-pulang rounded-3 px-3 py-3 d-block"
-							style="background:#fff6e8 !important;">
+							style="background:#fff6e8 !important;<?php 
+								// Disable button if patrol is required and not complete
+								if (isset($active_shift_patrol) && $active_shift_patrol && $active_shift_patrol['is_required'] && !($active_shift_patrol['is_complete'] ?? false)) {
+									echo ' pointer-events: none; opacity: 0.5; cursor: not-allowed;';
+								}
+							?>">
 							<div class="d-flex align-items-center">
 								<i class="bi bi-box-arrow-right me-3 text-warning icon-box-presensi"
 									style="font-size:27px"></i>
